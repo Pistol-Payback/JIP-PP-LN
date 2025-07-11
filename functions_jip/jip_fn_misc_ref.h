@@ -1550,16 +1550,16 @@ bool __fastcall RegisterInsertObject(char *inData)
 		if (rootNode && (doInsert & 2))
 		{
 			bool useRoot = !blockName || (rootNode->m_blockName == blockName);
-			NiAVObject *targetObj = useRoot ? rootNode : rootNode->GetBlockByName(blockName);
+			NiAVObject *targetObj = useRoot ? rootNode : rootNode->GetBlockByName(blockName.CStr());
 			if (targetObj)
 				if (insertNode)
-					DoInsertNode(targetObj, objectName, *pDataStr, rootNode);
+					DoInsertNode(targetObj, objectName, pDataStr->CStr(), rootNode);
 				else if ((rootNode = DoAttachModel(targetObj, objectName, pDataStr, rootNode)) && (rootNode->m_flags & 0x20000000))
 					AddPointLights(rootNode);
 			if (refr->IsPlayer() && (rootNode = s_pc1stPersonNode))
-				if (targetObj = useRoot ? rootNode : rootNode->GetBlockByName(blockName))
+				if (targetObj = useRoot ? rootNode : rootNode->GetBlockByName(blockName.CStr()))
 					if (insertNode)
-						DoInsertNode(targetObj, objectName, *pDataStr, rootNode);
+						DoInsertNode(targetObj, objectName, pDataStr->CStr(), rootNode);
 					else DoAttachModel(targetObj, objectName, pDataStr, rootNode);
 		}
 	}
@@ -1573,12 +1573,12 @@ bool __fastcall RegisterInsertObject(char *inData)
 		if (!findData) return false;
 		if (rootNode && (doInsert & 2) && findData() && (!insertNode || (*objectName != '^')))
 		{
-			NiAVObject *object = rootNode->GetBlockByName(findData());
+			NiAVObject *object = rootNode->GetBlockByName(findData().CStr());
 			if (object)
 				object->m_parent->RemoveObject(object);
 			if (refr->IsPlayer() && (rootNode = s_pc1stPersonNode))
 			{
-				object = rootNode->GetBlockByName(findData());
+				object = rootNode->GetBlockByName(findData().CStr());
 				if (object)
 					object->m_parent->RemoveObject(object);
 			}
@@ -1822,7 +1822,7 @@ bool Cmd_GetBlockTextureSet_Execute(COMMAND_ARGS)
 				else if (shaderProp->shaderType == BSShaderProperty::kType_NoLighting)
 					if (BSShaderNoLightingProperty *noLightingProp = (BSShaderNoLightingProperty*)shaderProp;
 						noLightingProp->srcTexture && IS_TYPE(noLightingProp->srcTexture, NiSourceTexture))
-						if (filePath = ((NiSourceTexture*)noLightingProp->srcTexture)->ddsPath1)
+						if (filePath = ((NiSourceTexture*)noLightingProp->srcTexture)->ddsPath1.CStr())
 						{
 							createArr = true;
 							if (StrBeginsCI(filePath, "data\\textures\\"))

@@ -175,6 +175,7 @@ __declspec(naked) TESForm* __stdcall LookupFormByRefID(UInt32 refID)
 	}
 }
 
+/*
 __declspec(naked) TESForm* __fastcall LookupFormByEDID(const char *edidStr)
 {
 	__asm
@@ -182,6 +183,19 @@ __declspec(naked) TESForm* __fastcall LookupFormByEDID(const char *edidStr)
 		mov		edx, ecx
 		mov		ecx, ds:0x11C54C8
 		jmp		NiTMap<UInt32, UInt32>::Lookup
+	}
+}
+*/
+
+//Uses vanilla function:
+__declspec(naked) TESForm* __fastcall LookupFormByEDID(const char* edidStr)
+{
+	__asm {
+		push    ecx
+		mov     eax, 0x483A00
+		call    eax
+		add     esp, 4
+		ret
 	}
 }
 

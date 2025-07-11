@@ -13,6 +13,9 @@
     <Filter Include="nvse">
       <UniqueIdentifier>{24d2020b-84bb-4362-a28b-e4919d0156c7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="pUtilities">
+      <UniqueIdentifier>{3358a370-4a06-458d-9f21-234dcfe83118}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="jip_nvse.cpp" />
@@ -390,6 +393,9 @@
     <ClInclude Include="internal\base_defs.h">
       <Filter>internal</Filter>
     </ClInclude>
+    <ClInclude Include="NiFixedString.hpp">
+      <Filter>pUtilities</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="exports.def" />
@@ -400,5 +406,10 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="jip_nvse.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="NiFixedString.natvis">
+      <Filter>pUtilities</Filter>
+    </Natvis>
   </ItemGroup>
 </Project>

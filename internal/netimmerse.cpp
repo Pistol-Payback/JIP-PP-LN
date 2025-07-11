@@ -1,4 +1,5 @@
 #include "internal/netimmerse.h"
+#include "jip_core.h"
 
 __declspec(naked) NiObject* __fastcall NiObject::HasBaseType(const NiRTTI *baseType)
 {
@@ -528,6 +529,49 @@ __declspec(naked) NiNode* __fastcall NiNode::GetNode(const char *nodeName) const
 	done:
 		retn
 	}
+}
+
+TempObject<NiFixedString> s_LIGH_EDID;
+void NiPointLight::initLightBlock(NiNode* rootNode) {
+
+	NiExtraData** list = this->m_extraDataList;
+	int size = this->m_extraDataListLen;
+
+	while (--size >= 0) {
+
+		NiExtraData* extraData = list[size];
+		if (!extraData) continue;
+
+		if (extraData->name.CStr() == s_LIGH_EDID().CStr()) {
+
+			if (extraData->IsType(kVtbl_NiStringExtraData)) {
+
+				NiStringExtraData* extraString = static_cast<NiStringExtraData*>(extraData);
+				if (const char* edid = extraString->strData.CStr()) {
+
+					if (auto* form = LookupFormByEDID(edid); form && form->typeID == kFormType_TESObjectLIGH)
+					{
+						this->m_flags |= NiAVObject::kNiFlag_IsPointLight;
+						this->baseLight = (TESObjectLIGH*)form;
+
+						for (NiAVObject* p = this->m_parent; p && p != rootNode; p = p->m_parent) {
+
+							if (p->m_flags & NiAVObject::kNiFlag_IsPointLight)
+								break;
+
+							p->m_flags |= NiAVObject::kNiFlag_IsPointLight;
+						}
+
+					}
+
+				}
+			}
+
+			this->RemoveExtraData(size);
+
+		}
+	}
+
 }
 
 __declspec(naked) NiAVObject* __fastcall NiNode::FindBlockOfType(UInt32 typeVtbl) const

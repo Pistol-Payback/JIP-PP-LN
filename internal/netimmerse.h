@@ -1,7 +1,9 @@
-#pragma once
+﻿#pragma once
+#include "NiFixedString.hpp"
 
-const char* __cdecl GetNiFixedString(const char *inStr);
+//const char* __cdecl GetNiFixedString(const char *inStr);
 
+/*
 class NiFixedString
 {
 	const char		*str;
@@ -30,6 +32,7 @@ public:
 	~NiFixedString() {Unset();}
 
 	const char *Get() const {return str ? str : "NULL";}
+	const char* CStr() const { return str ? str : "NULL"; }
 
 	UInt32 Length() const {return str ? Meta()[1] : 0;}
 
@@ -55,6 +58,11 @@ public:
 
 	UInt32 RefCount() const {return str ? Meta()[0] : 0;}
 };
+*/
+
+// forward‐declare our real implementation
+void __fastcall InitPointLights_Impl(NiNode* rootNode, NiNode* sentinel);
+extern TempObject<NiFixedString> s_LIGH_EDID;
 
 template <typename T_Data>
 class NiTFixedStringMap
@@ -154,8 +162,6 @@ public:
 	Iterator Begin() {return Iterator(*this);}
 };
 
-class NiMemObject {};
-
 // 08
 class NiRefObject : public NiMemObject
 {
@@ -164,6 +170,11 @@ public:
 	/*04*/virtual void		Free(void);
 
 	UInt32		m_uiRefCount;	// 04
+
+	bool IsType(UInt32 vtblPtr) const {
+		return *reinterpret_cast<void* const*>(this) == reinterpret_cast<void*>(vtblPtr);
+	}
+
 };
 
 class TempNiRefObject
@@ -796,6 +807,7 @@ public:
 	/*90*/virtual void		Unk_24(void);
 
 	NiFixedString	name;		// 08
+
 };
 
 // 10
@@ -975,13 +987,52 @@ public:
 	UInt16				m_extraDataListLen;			// 14
 	UInt16				m_extraDataListCapacity;	// 16
 
-	const char *GetName() const {return m_blockName.Get();}
+	const char *GetName() const {return m_blockName.CStr();}
 	void __fastcall SetName(const char *newName);
 	NiExtraData* __fastcall GetExtraData(UInt32 vtbl) const;
 	__forceinline bool AddExtraData(NiExtraData *xData)
 	{
 		return ThisCall<bool>(0xA5BA40, this, xData);
 	}
+
+	void RemoveExtraData(UInt32 index) {
+		using Fn = void(__thiscall*)(NiObjectNET*, UInt16);
+		reinterpret_cast<Fn>(0xA5B990)(this, index);
+		return;
+	}
+
+	void RemoveExtraData(NiExtraData* xData) {
+		auto list = m_extraDataList;
+		UInt16 len = m_extraDataListLen;
+		for (UInt16 i = 0; i < len; ++i) {
+			if (list[i] == xData) {
+				using Fn = void(__thiscall*)(NiObjectNET*, UInt16);
+				this->RemoveExtraData(i);
+				return;
+			}
+		}
+	}
+
+	// Convenience: remove by type-name string:
+	void RemoveExtraData(const NiFixedString& typeName) {
+		UInt16 len = m_extraDataListLen;
+		for (UInt16 i = 0; i < len; ++i) {
+			NiExtraData* ed = m_extraDataList[i];
+			if (ed && ed->name == typeName) {
+				RemoveExtraData(ed);
+				return;
+			}
+		}
+	}
+
+	template<typename Func>
+	void ForEachExtraRev(Func&& fn) const {
+		for (UInt16 i = m_extraDataListLen; i-- > 0; ) {
+			if (NiExtraData* ed = m_extraDataList[i])
+				fn(ed, i);
+		}
+	}
+
 	void DumpExtraData();
 };
 
@@ -1592,6 +1643,11 @@ public:
 
 	void Dump(UInt8 dumpFlags = 0xF);
 	void DumpParents();
+
+	__forceinline bool isNiNode() {
+		return ((*(UInt32**)this)[(0xC >> 2)] == 0x6815C0);
+	}
+
 };
 
 // AC
@@ -2135,6 +2191,7 @@ public:
 	NiVector4		vector100;		// 100
 
 	__forceinline static NiPointLight *Create() {return CdeclCall<NiPointLight*>(0xA7D6E0);}
+	void initLightBlock(NiNode* rootNode);
 };
 static_assert(sizeof(NiPointLight) == 0x110);
 

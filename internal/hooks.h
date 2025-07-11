@@ -2880,8 +2880,51 @@ __declspec(naked) const char* __fastcall TESObjectLIGHGetEDIDHook(TESObjectLIGH 
 	}
 }
 
-TempObject<NiFixedString> s_LIGH_EDID;
+// this is the actual hook (matching the naked stub’s signature: ECX=root, EBP=sentinel)
+__declspec(naked) void __fastcall InitPointLights(NiNode* rootNode)
+{
+	__asm {
+		// --- preserve registers ---
+		push    esi
+		push    edi
 
+		// ECX already == rootNode
+		// EBP already holds the original call’s sentinel (the root node of this hierarchy)
+		push    ecx             // push sentinel
+		push    ecx             // push rootNode
+		call    InitPointLights_Impl
+		add     esp, 8
+
+		// --- restore registers & return ---
+		pop     edi
+		pop     esi
+		ret
+	}
+}
+
+void __fastcall InitPointLights_Impl(NiNode* self, NiNode* sentinel)
+{
+	int end = self->m_children.firstFreeEntry;
+	if (end <= 0) return;
+
+	NiAVObject** data = self->m_children.data;
+	while (--end >= 0) {
+
+		NiAVObject* root = *data++;
+		if (!root) continue;
+
+		if (root->IsType(kVtbl_NiPointLight)) {
+			NiPointLight* light = static_cast<NiPointLight*>(root);
+			light->initLightBlock(sentinel);
+		}
+		else if (root->isNiNode()) {
+			InitPointLights(static_cast<NiNode*>(root));
+		}
+	}
+
+}
+
+/*
 __declspec(naked) void __fastcall InitPointLights(NiNode *niNode)
 {
 	__asm
@@ -2960,7 +3003,7 @@ __declspec(naked) void __fastcall InitPointLights(NiNode *niNode)
 		retn
 	}
 }
-
+*/
 __declspec(naked) void LoadNifRetnNodeHook()
 {
 	__asm

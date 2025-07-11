@@ -103,7 +103,8 @@
     </Link>
     <PostBuildEvent>
       <Message>Installing DLL...</Message>
-      <Command>copy "$(TargetPath)" "D:\Games\Fallout New Vegas\Data\NVSE\plugins\$(TargetFileName)"</Command>
+      <Command>
+      </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -120,10 +121,10 @@
       <AssemblerOutput>NoListing</AssemblerOutput>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <OmitFramePointers>false</OmitFramePointers>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <Optimization>MaxSpeed</Optimization>
-      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
+      <Optimization>Disabled</Optimization>
+      <InlineFunctionExpansion>Default</InlineFunctionExpansion>
+      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <StringPooling>true</StringPooling>
@@ -152,7 +153,8 @@
     </Link>
     <PostBuildEvent>
       <Message>Installing DLL...</Message>
-      <Command>copy "$(TargetPath)" "D:\Games\Fallout New Vegas\Data\NVSE\plugins\$(TargetFileName)"</Command>
+      <Command>
+      </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -263,6 +265,7 @@
     <ClInclude Include="internal\utility.h" />
     <ClInclude Include="internal\version.h" />
     <ClInclude Include="internal\xinput.h" />
+    <ClInclude Include="NiFixedString.hpp" />
     <ClInclude Include="nvse\CommandTable.h" />
     <ClInclude Include="nvse\GameAPI.h" />
     <ClInclude Include="nvse\GameBSExtraData.h" />
@@ -291,6 +294,9 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="jip_nvse.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="NiFixedString.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

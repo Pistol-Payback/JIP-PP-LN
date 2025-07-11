@@ -69,7 +69,7 @@
 #include "functions_ln/ln_fn_utility.h"
 #include "functions_ln/ln_fn_weapon.h"
 #if JIP_DEBUG
-#include "internal/debug.h"
+//#include "internal/debug.h"
 #endif
 
 extern "C"
@@ -448,7 +448,7 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 	/*233A*/REG_CMD(SetWaterTrait);
 
 #if JIP_DEBUG
-	RegisterDebugFunctions(nvse);
+	//RegisterDebugFunctions(nvse);
 #endif
 
 	//____________________FUNCTIONS_JIP____________________

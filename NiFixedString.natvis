@@ -1,0 +1,17 @@
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<Type Name="NiFixedString">
+		<!-- null‐string case -->
+		<DisplayString Condition="str == nullptr">
+			NULL
+		</DisplayString>
+		<!-- normal case: show the text + refCount + length -->
+		<DisplayString Condition="str != nullptr">
+			{str, s} [ref={((unsigned int*)str)[-2]}, len={((unsigned int*)str)[-1]}]
+		</DisplayString>
+		<Expand>
+			<Item Name="String">str, s</Item>
+			<Item Name="RefCount">((unsigned int*)str)[-2]</Item>
+			<Item Name="Length">((unsigned int*)str)[-1]</Item>
+		</Expand>
+	</Type>
+</AutoVisualizer>
