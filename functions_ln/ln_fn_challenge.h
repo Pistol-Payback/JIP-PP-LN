@@ -2,6 +2,7 @@
 
 DEFINE_COMMAND_PLUGIN(GetChallengeType, 0, kParams_OneChallenge);
 DEFINE_COMMAND_PLUGIN(GetChallengeFlags, 0, kParams_OneChallenge);
+DEFINE_COMMAND_PLUGIN(SetChallengeType, 0, kParams_OneChallenge_OneInt);
 DEFINE_COMMAND_PLUGIN(SetChallengeFlags, 0, kParams_OneChallenge_OneInt);
 DEFINE_COMMAND_PLUGIN(GetChallengeThreshold, 0, kParams_OneChallenge);
 DEFINE_COMMAND_PLUGIN(SetChallengeThreshold, 0, kParams_OneChallenge_OneInt);
@@ -17,6 +18,15 @@ DEFINE_COMMAND_PLUGIN(GetChallengeForm1, 0, kParams_OneChallenge);
 DEFINE_COMMAND_PLUGIN(SetChallengeForm1, 0, kParams_OneChallenge_OneForm);
 DEFINE_COMMAND_PLUGIN(GetChallengeForm2, 0, kParams_OneChallenge);
 DEFINE_COMMAND_PLUGIN(SetChallengeForm2, 0, kParams_OneChallenge_OneForm);
+
+bool Cmd_SetChallengeType_Execute(COMMAND_ARGS)
+{
+	TESChallenge* challenge;
+	UInt32 value;
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &challenge, &value))
+		challenge->data.type = value;
+	return true;
+}
 
 bool Cmd_GetChallengeType_Execute(COMMAND_ARGS)
 {

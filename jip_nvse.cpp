@@ -1421,6 +1421,9 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 	/*2941*/REG_CMD(IsAttackQueued);
 	/*2942*/REG_CMD(GetReticleTargetLimb);
 
+	//	v57.41
+	/*2943*/REG_CMD(SetChallengeType); //FinalCatalyst
+
 	//===========================================================
 
 	if (nvse->isEditor)
