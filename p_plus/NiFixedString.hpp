@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "internal\Ni_types.h"
 
 const char* __cdecl CreateNiFixedString(const char* inStr);
 const char* __cdecl GetNiFixedString(const char* inStr);
@@ -225,7 +226,10 @@ public:
 	//-------------------------------------------------------------------------
 	// Accessors
 	//-------------------------------------------------------------------------
+
 	const char* CStr() const { return str ? str : "NULL"; }
+	const char* getPtr() const { return str; }
+
 	//operator const char* () const noexcept { return CStr(); }
 	explicit operator bool() const noexcept { return str != nullptr; }
 	const char* operator*() const noexcept { return str; }

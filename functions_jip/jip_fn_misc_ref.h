@@ -1,4 +1,5 @@
 #pragma once
+#include "p_plus/FormModelHandler.hpp"
 
 DEFINE_COMMAND_PLUGIN(SetPersistent, 1, kParams_OneInt);
 DEFINE_COMMAND_ALT_PLUGIN(GetObjectDimensions, GetObjDim, 0, kParams_OneAxis_OneOptionalBoundObject);
@@ -1029,12 +1030,13 @@ __declspec(naked) NiAVObject* __fastcall GetNifBlock(TESObjectREFR *thisObj, UIn
 bool Cmd_GetNifBlockTranslation_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
-	UInt32 getWorld = 0, pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &getWorld, &pcNode))
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	UInt32 getWorld = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &getWorld, &playerNode))
+		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
-			NiVector3 &transltn = getWorld ? niBlock->WorldTranslate() : niBlock->LocalTranslate();
-			ArrayElementL elements[3] = {transltn.x, transltn.y, transltn.z};
+			NiVector3& transltn = getWorld ? niBlock->WorldTranslate() : niBlock->LocalTranslate();
+			ArrayElementL elements[3] = { transltn.x, transltn.y, transltn.z };
 			*result = (int)CreateArray(elements, 3, scriptObj);
 		}
 	return true;
@@ -1044,23 +1046,30 @@ bool Cmd_SetNifBlockTranslation_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	NiVector3 transltn;
-	UInt32 pcNode = 0, transform = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &transltn.x, &transltn.y, &transltn.z, &pcNode, &transform) && blockName[0])
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	UInt32 transform = 0;
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &transltn.x, &transltn.y, &transltn.z, &playerNode, &transform) && blockName[0])
+
+		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			if (!transform)
 				niBlock->LocalTranslate() = transltn;
 			else if (transform == 1)
 				niBlock->LocalTranslate() += transltn.PS();
-			else
-				niBlock->LocalTranslate() += niBlock->WorldRotate().MultiplyVector(transltn.PS());
+			else {
+				//From Plugins+
+				NiVector3 worldPt(transltn.x, transltn.y, transltn.z);
+				NiVector3 translated = worldPt - niBlock->m_parent->WorldTranslate();
+				__m128 invRotPS = niBlock->m_parent->WorldRotate().MultiplyVectorInv(translated.PS());
+				niBlock->LocalRotate() = NiVector3(invRotPS);
+			}
 			if IS_NODE(niBlock)
 			{
 				if NOT_ACTOR(thisObj)
 					((NiNode*)niBlock)->ResetCollision();
 			}
 			else if IS_TYPE(niBlock, NiPointLight)
-				if (NiPointLight *ptLight = (NiPointLight*)niBlock; ptLight->extraFlags & 1)
+				if (NiPointLight* ptLight = (NiPointLight*)niBlock; ptLight->extraFlags & 1)
 					ptLight->vector100 = transltn;
 			niBlock->UpdateDownwardPass(kNiUpdateData, 0);
 		}
@@ -1070,9 +1079,10 @@ bool Cmd_SetNifBlockTranslation_Execute(COMMAND_ARGS)
 bool Cmd_GetNifBlockRotation_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
-	UInt32 getMode = 0, pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &getMode, &pcNode))
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	UInt32 getMode = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &getMode, &playerNode))
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			NiVector4 rot;
 			__asm
@@ -1100,9 +1110,10 @@ bool Cmd_SetNifBlockRotation_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	NiVector3 rot;
-	UInt32 transform = 0, pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &rot.x, &rot.y, &rot.z, &transform, &pcNode) && blockName[0])
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	UInt32 transform = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &rot.x, &rot.y, &rot.z, &transform, &playerNode) && blockName[0])
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			switch (transform)
 			{
@@ -1136,9 +1147,9 @@ bool Cmd_SetNifBlockRotation_Execute(COMMAND_ARGS)
 bool Cmd_GetNifBlockScale_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
-	UInt32 pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &pcNode))
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &playerNode))
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 			*result = niBlock->m_transformLocal.scale;
 	return true;
 }
@@ -1147,9 +1158,9 @@ bool Cmd_SetNifBlockScale_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	float newScale;
-	UInt32 pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &newScale, &pcNode) && blockName[0])
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &newScale, &playerNode) && blockName[0])
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			niBlock->m_transformLocal.scale = newScale;
 			if (IS_NODE(niBlock) && NOT_ACTOR(thisObj))
@@ -1162,9 +1173,10 @@ bool Cmd_SetNifBlockScale_Execute(COMMAND_ARGS)
 bool Cmd_GetNifBlockFlag_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
-	UInt32 flagID, pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &flagID, &pcNode) && (flagID <= 31))
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName); niBlock && (niBlock->m_flags & (1 << flagID)))
+	UInt32 flagID = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &flagID, &playerNode) && (flagID <= 31))
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName); niBlock && (niBlock->m_flags & (1 << flagID)))
 			*result = 1;
 	return true;
 }
@@ -1172,9 +1184,10 @@ bool Cmd_GetNifBlockFlag_Execute(COMMAND_ARGS)
 bool Cmd_SetNifBlockFlag_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
-	UInt32 flagID, doSet, pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &flagID, &doSet, &pcNode) && (flagID <= 26))
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	UInt32 flagID, doSet = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &flagID, &doSet, &playerNode) && (flagID <= 26))
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			if (doSet) niBlock->m_flags |= (1 << flagID);
 			else niBlock->m_flags &= ~(1 << flagID);
@@ -1482,7 +1495,75 @@ bool Cmd_SetLinearVelocity_Execute(COMMAND_ARGS)
 	return true;
 }
 
-bool __fastcall RegisterInsertObject(char *inData)
+//Version 57.41
+#pragma pack(push,1)
+struct InsertObjectParams {
+
+	enum class InsertMode : UInt8 {
+		kRemove_Pending = 0,  // bit-pattern 00
+		kAttach_Pending = 1,  // bit-pattern 01
+		kRemove_Instant = 2,  // bit-pattern 10
+		kAttach_Instant = 3   // bit-pattern 11
+	};
+
+	TESForm*	form;       // bytes [0…3]
+	InsertMode	mode;   // byte  4  (mode & flags)
+	UInt8		hookFlag;   // byte  5
+	UInt16		reserved;   // bytes [6…7], unused
+	// from offset 8 on we store the “node|object” string
+	char       pathSpec[0x100 - 8];
+
+	constexpr bool isAttach() {
+		return (static_cast<uint8_t>(mode) & 0x1) != 0;
+	}
+	constexpr bool isInstant() {
+		return (static_cast<uint8_t>(mode) & 0x2) != 0;
+	}
+
+};
+#pragma pack(pop)
+
+//Version 57.41
+bool __fastcall RegisterInsertObject_New(InsertObjectParams& inData) {
+
+	// Determine if we have a reference, and bail out early if invalid
+	TESObjectREFR* refr = IS_REFERENCE(inData.form) ? static_cast<TESObjectREFR*>(inData.form) : nullptr;
+	NiNode* rootNode = refr ? refr->GetRefNiNode() : nullptr;
+	if (refr ? !rootNode : !inData.form->IsBoundObject())
+		return false;
+
+	// Use the reference itself as the form if present
+	TESForm* targetForm = refr ? refr : inData.form;
+
+	bool		attach = inData.isAttach();
+	auto		hook = inData.hookFlag;
+
+	const char* path = inData.pathSpec;
+
+	switch (hook) {
+	case kHookFormFlag6_InsertNode:
+		if (attach)
+			return FormRuntimeModelManager::getSingleton().RegisterNode(targetForm, path, rootNode);
+		else
+			return FormRuntimeModelManager::getSingleton().RemoveNode(targetForm, path, hook);
+		break;
+
+	case kHookFormFlag6_AttachModel:
+		if (attach)
+			return FormRuntimeModelManager::getSingleton().RegisterModel(targetForm, path, rootNode);
+		else
+			return FormRuntimeModelManager::getSingleton().RemoveNode(targetForm, path, hook);
+		break;
+
+	default:
+		return false;
+	}
+
+	return true;
+}
+
+/*
+bool __fastcall RegisterInsertObject_Old(char *inData)
 {
 	static char meshesPath[0x100] = "data\\meshes\\";
 	ScopedString<0x100> scopedStr(inData);
@@ -1553,14 +1634,14 @@ bool __fastcall RegisterInsertObject(char *inData)
 			NiAVObject *targetObj = useRoot ? rootNode : rootNode->GetBlockByName(blockName.CStr());
 			if (targetObj)
 				if (insertNode)
-					DoInsertNode(targetObj, objectName, pDataStr->CStr(), rootNode);
-				else if ((rootNode = DoAttachModel(targetObj, objectName, pDataStr, rootNode)) && (rootNode->m_flags & 0x20000000))
+					DoInsertNode_Old(targetObj, objectName, pDataStr->CStr(), rootNode);
+				else if ((rootNode = DoAttachModel_Old(targetObj, objectName, pDataStr, rootNode)) && (rootNode->m_flags & 0x20000000))
 					AddPointLights(rootNode);
 			if (refr->IsPlayer() && (rootNode = s_pc1stPersonNode))
 				if (targetObj = useRoot ? rootNode : rootNode->GetBlockByName(blockName.CStr()))
 					if (insertNode)
-						DoInsertNode(targetObj, objectName, pDataStr->CStr(), rootNode);
-					else DoAttachModel(targetObj, objectName, pDataStr, rootNode);
+						DoInsertNode_Old(targetObj, objectName, pDataStr->CStr(), rootNode);
+					else DoAttachModel_Old(targetObj, objectName, pDataStr, rootNode);
 		}
 	}
 	else
@@ -1597,38 +1678,60 @@ bool __fastcall RegisterInsertObject(char *inData)
 	s_insertObjects = !s_insertNodeMap->Empty() || !s_attachModelMap->Empty();
 	return true;
 }
+*/
 
+//Version 57.41
 bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 {
-	char *dataStr = Pool_CAlloc(0x100);
-	if (ExtractFormatStringArgs(2, dataStr + 8, EXTRACT_ARGS_EX, kCommandInfo_InsertNode.numParams, dataStr, dataStr + 4))
+
+	//InsertObjectParams* params = new InsertObjectParams;
+	InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>(sizeof(InsertObjectParams));
+	char* outForm = reinterpret_cast<char*>(&params->form);		// write form here
+	char* outMode = reinterpret_cast<char*>(&params->mode);		// write mode here
+	char* pathBuf = params->pathSpec;
+
+	//if (ExtractArgsEx(EXTRACT_ARGS_EX, &params->form, &params->mode, &params->pathSpec))
+	if (ExtractFormatStringArgs(2, pathBuf, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, outForm, outMode))
 	{
-		((UInt8*)dataStr)[5] = kHookFormFlag6_InsertNode;
-		if (!(dataStr[4] & 2) || IsInMainThread())
+		params->hookFlag = kHookFormFlag6_InsertNode;
+		if (!(params->isInstant()) || IsInMainThread())
 		{
-			if (RegisterInsertObject(dataStr))
+			//if (RegisterInsertObject_Old((char*)params))
+			if (RegisterInsertObject_New(*params))
 				*result = 1;
 		}
-		else MainLoopAddCallback(RegisterInsertObject, dataStr);
+		//else MainLoopAddCallback(RegisterInsertObject_Old, params);
+		else MainLoopAddCallback(RegisterInsertObject_New, params);
 	}
-	else Pool_CFree(dataStr, 0x100);
+	else Pool_CFree(params, sizeof(InsertObjectParams));
 	return true;
 }
 
+//Version 57.41
 bool Cmd_AttachModel_Execute(COMMAND_ARGS)
 {
-	char *dataStr = Pool_CAlloc(0x100);
-	if (ExtractFormatStringArgs(2, dataStr + 8, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, dataStr, dataStr + 4))
+
+	//InsertObjectParams* params = new InsertObjectParams;
+	InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>(sizeof(InsertObjectParams));
+	char* buf = params->pathSpec;								// the buffer to split
+	char* outForm = reinterpret_cast<char*>(&params->form);		// write form here
+	char* outMode = reinterpret_cast<char*>(&params->mode);		// write mode here
+	char* pathBuf = params->pathSpec;
+
+	//if (ExtractArgsEx(EXTRACT_ARGS_EX, &params->form, &params->mode, &params->pathSpec))
+	if (ExtractFormatStringArgs(2, buf, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, outForm, outMode))
 	{
-		((UInt8*)dataStr)[5] = kHookFormFlag6_AttachModel;
-		if (!(dataStr[4] & 2) || IsInMainThread())
+		params->hookFlag = kHookFormFlag6_AttachModel;
+		if (!(params->isInstant()) || IsInMainThread())
 		{
-			if (RegisterInsertObject(dataStr))
+			//if (RegisterInsertObject_Old((char*)params))
+			if (RegisterInsertObject_New(*params))
 				*result = 1;
 		}
-		else MainLoopAddCallback(RegisterInsertObject, dataStr);
+		//else MainLoopAddCallback(RegisterInsertObject_Old, params);
+		else MainLoopAddCallback(RegisterInsertObject_New, params);
 	}
-	else Pool_CFree(dataStr, 0x100);
+	else Pool_CFree(params, sizeof(InsertObjectParams));
 	return true;
 }
 
@@ -1668,47 +1771,37 @@ bool Cmd_ModelHasBlock_Execute(COMMAND_ARGS)
 {
 	char buffer[0x80];
 	buffer[0] = '^';
-	TESForm *form;
+	TESForm* form;
 	if (ExtractFormatStringArgs(1, buffer + 1, EXTRACT_ARGS_EX, kCommandInfo_ModelHasBlock.numParams, &form))
 	{
-		TESObjectREFR *refr = IS_REFERENCE(form) ? (TESObjectREFR*)form : nullptr;
-		NiNode *rootNode = refr ? refr->GetNiNode() : nullptr;
-		if (rootNode && rootNode->GetBlock(buffer + 1))
-			goto Retn1;
-		NodeNamesMap *namesMap = s_insertNodeMap->GetPtr(form);
-		if (namesMap)
-		{
-			for (auto iter = namesMap->Begin(); iter; ++iter)
-				if (iter().HasKey(buffer + 1) || iter().HasKey(buffer))
-					goto Retn1;
-		}
-		if (refr)
-		{
-			form = refr->GetBaseForm2();
-			if (!form) goto Retn0;
-			namesMap = s_insertNodeMap->GetPtr(form);
-			if (namesMap)
-			{
-				for (auto iter = namesMap->Begin(); iter; ++iter)
-					if (iter().HasKey(buffer + 1) || iter().HasKey(buffer))
-						goto Retn1;
+		TESObjectREFR* refr = IS_REFERENCE(form) ? (TESObjectREFR*)form : nullptr;
+		NiNode* rootNode = refr ? refr->GetNiNode() : nullptr;
+
+		if (rootNode) {
+
+			bool foundNode = rootNode->DeepSearchBySparsePath(NiBlockPathBase(buffer + 1)) != nullptr;
+
+			if (foundNode) {
+				*result = foundNode;
+				return true;
 			}
-		}
-		if (!rootNode && form->IsBoundObject())
-		{
-			const char *modelPath = form->GetModelPath();
-			if (modelPath)
-			{
-				rootNode = g_modelLoader->LoadModel(modelPath, 0, 1, 0, 1);
-				if (rootNode && rootNode->GetBlock(buffer + 1))
-					goto Retn1;
+			else if (form->IsPlayer()) {
+				if (s_pc1stPersonNode->DeepSearchBySparsePath(NiBlockPathBase(buffer + 1))) {
+					foundNode = true;
+				}
+				return true;	//Return early, because the player model is always loaded
 			}
+
 		}
+
+		if (refr) {
+			*result = FormRuntimeModelManager::getSingleton().HasNode(refr->baseForm, buffer + 1);
+		}
+		else {
+			*result = FormRuntimeModelManager::getSingleton().HasNode(form, buffer + 1);
+		}
+
 	}
-Retn0:
-	return true;
-Retn1:
-	*result = 1;
 	return true;
 }
 
@@ -1773,9 +1866,10 @@ bool Cmd_GetChildBlocks_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	blockName[0] = 0;
-	UInt32 pcNode = 0, noRecourse = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &pcNode, &noRecourse))
-		if (NiNode *objNode = (NiNode*)GetNifBlock(thisObj, pcNode, blockName); objNode && IS_NODE(objNode))
+	UInt32 noRecourse = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &playerNode, &noRecourse))
+		if (NiNode *objNode = (NiNode*)thisObj->findNodeByName(playerNode, blockName); objNode && IS_NODE(objNode))
 		{
 			TempElements *tmpElements = GetTempElements();
 			if (noRecourse)
@@ -1880,12 +1974,12 @@ bool Cmd_AttachExtraCamera_Execute(COMMAND_ARGS)
 	char camName[0x40], nodeName[0x40];
 	UInt32 doAttach;
 	nodeName[0] = 0;
-	UInt32 pcNode = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
 	NiCamera *xCamera;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &camName, &doAttach, &nodeName, &pcNode) && camName[0])
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &camName, &doAttach, &nodeName, &playerNode) && camName[0])
 		if (doAttach)
 		{
-			if (NiNode *targetNode = (NiNode*)GetNifBlock(thisObj, pcNode, nodeName); targetNode && IS_NODE(targetNode))
+			if (NiNode *targetNode = (NiNode*)thisObj->findNodeByName(playerNode, nodeName); targetNode && IS_NODE(targetNode))
 			{
 				NiCamera **pCamera;
 				if (s_extraCamerasMap->InsertKey(camName, &pCamera))
@@ -1962,9 +2056,9 @@ bool Cmd_ProjectExtraCamera_Execute(COMMAND_ARGS)
 bool Cmd_RenameNifBlock_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40], newName[0x40];
-	UInt32 pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &newName, &pcNode))
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &newName, &playerNode))
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			niBlock->SetName(newName);
 			*result = 1;
@@ -1975,9 +2069,9 @@ bool Cmd_RenameNifBlock_Execute(COMMAND_ARGS)
 bool Cmd_RemoveNifBlock_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
-	UInt32 pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &pcNode))
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &playerNode))
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			niBlock->m_parent->RemoveObject(niBlock);
 			*result = 1;
@@ -2023,9 +2117,10 @@ bool Cmd_GetNifBlockTranslationAlt_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	ResultVars outPos;
-	UInt32 getWorld = 0, pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &outPos.x, &outPos.y, &outPos.z, &getWorld, &pcNode))
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	UInt32 getWorld = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &outPos.x, &outPos.y, &outPos.z, &getWorld, &playerNode))
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			outPos.Set(getWorld ? niBlock->WorldTranslate().PS() : niBlock->LocalTranslate().PS());
 			*result = 1;
@@ -2037,9 +2132,10 @@ bool Cmd_GetNifBlockRotationAlt_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	ResultVars outRot;
-	UInt32 getMode = 0, pcNode = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &outRot.x, &outRot.y, &outRot.z, &getMode, &pcNode))
-		if (NiAVObject *niBlock = GetNifBlock(thisObj, pcNode, blockName))
+	UInt32 getMode = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &outRot.x, &outRot.y, &outRot.z, &getMode, &playerNode))
+		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			NiMatrix33 &rotMat = (getMode & 1) ? niBlock->WorldRotate() : niBlock->LocalRotate();
 			__m128 angles = (getMode & 2) ? rotMat.ToEulerPRYInv() : rotMat.ToEulerPRY();

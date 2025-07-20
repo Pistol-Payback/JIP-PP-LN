@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "NiFixedString.hpp"
+#include "p_plus/NiFixedString.hpp"
 
 //const char* __cdecl GetNiFixedString(const char *inStr);
 
@@ -172,7 +172,7 @@ public:
 	UInt32		m_uiRefCount;	// 04
 
 	bool IsType(UInt32 vtblPtr) const {
-		return *reinterpret_cast<void* const*>(this) == reinterpret_cast<void*>(vtblPtr);
+ 		return *reinterpret_cast<void* const*>(this) == reinterpret_cast<void*>(vtblPtr);
 	}
 
 };
@@ -1667,6 +1667,11 @@ public:
 	NiTArray<NiAVObject*>	m_children;		// 9C
 
 	static NiNode* __stdcall Create(const char *nameStr);		//	str of NiFixedString
+
+	//New, use these instead
+	static NiNode* pCreate(const char* nameStr);
+	static NiNode* pCreate(const NiFixedString& nameStr);
+
 	NiAVObject* __fastcall GetBlockByName(const char *nameStr) const;	//	str of NiFixedString
 	NiAVObject* __fastcall GetBlock(const char *blockName) const;
 	NiNode* __fastcall GetNode(const char *nodeName) const;
@@ -1687,6 +1692,97 @@ public:
 	bool HasPhantom();
 	float __vectorcall GetBodyMass(float totalMass) const;
 	void ApplyForce(const NiVector4 &forceVector);
+
+//------------------------------ Plugins+ ------------------------------
+
+	void AddPointLights();
+	NiAVObject* DeepSearchByName(const NiFixedString& nameStr) const;	//	str of NiString
+	NiAVObject* DeepSearchByName(const char* blockName) const;
+
+	NiAVObject* DeepSearchByPath(const char* blockPath);
+	NiAVObject* DeepSearchByPath(const NiBlockPathView& blockPath);
+
+	NiAVObject* DeepSearchBySparsePath(const NiBlockPathView& blockPath);
+
+	NiAVObject* BuildNiPath(const char* blockPath, NiBlockPathBuilder& output);
+	NiAVObject* BuildNiPath(const NiBlockPathView& blockPath, NiBlockPathBuilder& output);
+
+	void DownwardsInitPointLights(NiNode* root);
+
+	bool hasChildNode(const char* name) const {
+		for (auto child : m_children) {
+			if (child && child->m_blockName.isValid() && strcmp(child->m_blockName.CStr(), name) == 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool hasChildNode(const NiFixedString& name) const {
+		for (auto child : m_children) {
+			if (child && child->m_blockName == name) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void AddSuffixToAllChildren(const char* suffix);
+
+	//----------------------------------------------------------------------  
+	// 1) Collect all descendants of type T  
+	//----------------------------------------------------------------------  
+	template<typename T>
+	std::vector<T*> DeepSearchByType(UInt32 vtbl) const {
+		static_assert(std::is_base_of<NiAVObject, T>::value, "T must derive from NiAVObject");
+
+		std::vector<T*> out;
+		DeepSearchByTypeImpl<T>(this, vtbl, [&](T* match) {out.push_back(match); });
+
+		return out;
+	}
+
+	//----------------------------------------------------------------------  
+	// 2) Invoke a callback for each match  
+	//----------------------------------------------------------------------  
+	template<typename T, typename Func>
+	void DeepSearchByType(UInt32 vtbl, Func&& onMatch) const {
+		static_assert(std::is_base_of<NiAVObject, T>::value, "T must derive from NiAVObject");
+		DeepSearchByTypeImpl<T>(this, vtbl, std::forward<Func>(onMatch));
+	}
+
+	void InitPointLights(NiNode* root) {
+		InitPointLights_Impl(this, root);
+	}
+
+private:
+
+	NiAVObject* DeepSearchByNameIter(const NiFixedString& target) const;
+	NiAVObject* BuildNiPathIter(const NiBlockPathView& blockPath, NiBlockPathBuilder& output) const;
+	NiAVObject* DeepSearchByPathIter(const NiBlockPathView& blockPath, uint32_t startIdx);
+
+	//----------------------------------------------------------------------  
+	// Impl for vector‐building  
+	//----------------------------------------------------------------------  
+	template<typename T, typename Func>
+	static void DeepSearchByTypeImpl(const NiNode* root, UInt32 vtbl, Func&& onMatch)
+	{
+		UInt16 count = root->m_children.firstFreeEntry;
+		for (UInt32 i = 0; i < count; ++i) {
+			NiAVObject* child = root->m_children[i];
+			if (!child) continue;
+
+			// compare the child’s vtable (first dword) to vtbl
+			if (*reinterpret_cast<UInt32*>(child) == vtbl) {
+				onMatch(static_cast<T*>(child));
+			}
+			// recurse into any sub-node
+			if (const NiNode* sub = child->GetNiNode()) {
+				DeepSearchByTypeImpl<T>(sub, vtbl, std::forward<Func>(onMatch));
+			}
+		}
+	}
+
 };
 static_assert(sizeof(NiNode) == 0xAC);
 
@@ -1719,6 +1815,7 @@ public:
 	__forceinline static BSFadeNode *Create() {return ThisCall<BSFadeNode*>(0xB4E150, CdeclCall<void*>(0xAA13E0, sizeof(BSFadeNode)));}
 
 	void __fastcall SetVisible(bool visible);
+
 };
 static_assert(sizeof(BSFadeNode) == 0xE4);
 
@@ -2192,8 +2289,12 @@ public:
 
 	__forceinline static NiPointLight *Create() {return CdeclCall<NiPointLight*>(0xA7D6E0);}
 	void initLightBlock(NiNode* rootNode);
+	void SetLightProperties(TESObjectLIGH* lightForm);
+
 };
 static_assert(sizeof(NiPointLight) == 0x110);
+
+extern TempObject<Vector<NiPointLight*>> s_activePtLights;
 
 // 114
 class NiSpotLight : public NiLight

@@ -120,6 +120,11 @@ __forceinline T_Ret CdeclCall(UInt32 _addr, Args ...args)
 	return ((T_Ret (__cdecl *)(Args...))_addr)(std::forward<Args>(args)...);
 }
 
+template <typename T_Ret = void, typename ...Args>
+__forceinline T_Ret FastCall(uint32_t addr, Args... args) {
+	return ((T_Ret(__fastcall*)(Args...)) addr)(std::forward<Args>(args)...);
+}
+
 //	Workaround used for:
 //	* Preventing the compiler from generating _atexit d'tors for static objects.
 //	* Bypassing the compiler calling the d'tor on function-scope objects.

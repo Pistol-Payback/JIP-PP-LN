@@ -16,6 +16,12 @@
     <Filter Include="pUtilities">
       <UniqueIdentifier>{3358a370-4a06-458d-9f21-234dcfe83118}</UniqueIdentifier>
     </Filter>
+    <Filter Include="pUtilities\Models">
+      <UniqueIdentifier>{a2bab788-8b1d-45af-a87b-4cff28403b04}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="pUtilities\Nif">
+      <UniqueIdentifier>{7f35b01d-4448-4fc7-a9e7-e350d5df68b8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="jip_nvse.cpp" />
@@ -84,6 +90,12 @@
     </ClCompile>
     <ClCompile Include="internal\Ni_types.cpp">
       <Filter>internal</Filter>
+    </ClCompile>
+    <ClCompile Include="p_plus\hookGlue.cpp">
+      <Filter>pUtilities</Filter>
+    </ClCompile>
+    <ClCompile Include="p_plus\NiNode.cpp">
+      <Filter>pUtilities\Nif</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -393,7 +405,31 @@
     <ClInclude Include="internal\base_defs.h">
       <Filter>internal</Filter>
     </ClInclude>
-    <ClInclude Include="NiFixedString.hpp">
+    <ClInclude Include="p_plus\pPrefix.hpp">
+      <Filter>pUtilities</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\VectorSortedView.hpp">
+      <Filter>pUtilities</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\FormModelHandler.hpp">
+      <Filter>pUtilities\Models</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\ModelBuilder.hpp">
+      <Filter>pUtilities\Models</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\NiBlockPath.hpp">
+      <Filter>pUtilities\Models</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\NiFixedString.hpp">
+      <Filter>pUtilities</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\NiRuntimeNode.hpp">
+      <Filter>pUtilities\Models</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\RuntimeNodeVector.hpp">
+      <Filter>pUtilities\Models</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\pBitMask.hpp">
       <Filter>pUtilities</Filter>
     </ClInclude>
   </ItemGroup>
@@ -408,7 +444,13 @@
     <ResourceCompile Include="jip_nvse.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="NiFixedString.natvis">
+    <Natvis Include="p_plus\NiFixedString.natvis">
+      <Filter>pUtilities</Filter>
+    </Natvis>
+    <Natvis Include="p_plus\NiBlockPath.natvis">
+      <Filter>pUtilities\Models</Filter>
+    </Natvis>
+    <Natvis Include="p_plus\pBitMask.natvis">
       <Filter>pUtilities</Filter>
     </Natvis>
   </ItemGroup>

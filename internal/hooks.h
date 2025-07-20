@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 enum
 {
@@ -2880,48 +2880,51 @@ __declspec(naked) const char* __fastcall TESObjectLIGHGetEDIDHook(TESObjectLIGH 
 	}
 }
 
-// this is the actual hook (matching the naked stub�s signature: ECX=root, EBP=sentinel)
-__declspec(naked) void __fastcall InitPointLights(NiNode* rootNode)
+// Recursive helper: `node` is the subtree to visit, `parent` is
+// the original node you want to use when initializing each light
+void __fastcall InitPointLightsIter(NiNode* node, NiNode* parent)
 {
-	__asm {
-		// --- preserve registers ---
-		push    esi
-		push    edi
+	int count = node->m_children.firstFreeEntry;
+	if (count <= 0)
+		return;
 
-		// ECX already == rootNode
-		// EBP already holds the original call�s sentinel (the root node of this hierarchy)
-		push    ecx             // push sentinel
-		push    ecx             // push rootNode
-		call    InitPointLights_Impl
-		add     esp, 8
+	NiAVObject** children = node->m_children.data;
+	for (int i = 0; i < count; ++i) {
+		NiAVObject* obj = children[i];
+		if (!obj)
+			continue;
 
-		// --- restore registers & return ---
-		pop     edi
-		pop     esi
-		ret
+		if (obj->IsType(kVtbl_NiPointLight)) {
+			auto* light = static_cast<NiPointLight*>(obj);
+			light->initLightBlock(parent);
+		}
+		else if (obj->isNiNode()) {
+			InitPointLightsIter(static_cast<NiNode*>(obj), parent);
+		}
 	}
 }
 
-void __fastcall InitPointLights_Impl(NiNode* self, NiNode* sentinel)
+// Kick off the traversal
+void __fastcall InitPointLights(NiNode* rootNode)
 {
-	int end = self->m_children.firstFreeEntry;
-	if (end <= 0) return;
+	int count = rootNode->m_children.firstFreeEntry;
+	if (count <= 0)
+		return;
 
-	NiAVObject** data = self->m_children.data;
-	while (--end >= 0) {
+	NiAVObject** children = rootNode->m_children.data;
+	for (int i = 0; i < count; ++i) {
+		NiAVObject* child = children[i];
+		if (!child)
+			continue;
 
-		NiAVObject* root = *data++;
-		if (!root) continue;
-
-		if (root->IsType(kVtbl_NiPointLight)) {
-			NiPointLight* light = static_cast<NiPointLight*>(root);
-			light->initLightBlock(sentinel);
+		if (child->IsType(kVtbl_NiPointLight)) {
+			auto* light = static_cast<NiPointLight*>(child);
+			light->initLightBlock(rootNode);
 		}
-		else if (root->isNiNode()) {
-			InitPointLights(static_cast<NiNode*>(root));
+		else if (child->isNiNode()) {
+			InitPointLightsIter(static_cast<NiNode*>(child), rootNode);
 		}
 	}
-
 }
 
 /*
@@ -3004,6 +3007,7 @@ __declspec(naked) void __fastcall InitPointLights(NiNode *niNode)
 	}
 }
 */
+
 __declspec(naked) void LoadNifRetnNodeHook()
 {
 	__asm
@@ -3034,8 +3038,6 @@ __declspec(naked) void LoadNifRetnNodeHook()
 	}
 }
 
-TempObject<Vector<NiPointLight*>> s_activePtLights(0x40);
-
 __declspec(naked) NiPointLight* __fastcall DestroyNiPointLightHook(NiPointLight *ptLight, int, bool doFree)
 {
 	__asm
@@ -3057,6 +3059,8 @@ __declspec(naked) NiPointLight* __fastcall DestroyNiPointLightHook(NiPointLight 
 		retn	4
 	}
 }
+
+TempObject<Vector<NiPointLight*>> s_activePtLights(0x40);
 
 __declspec(naked) NiPointLight* __fastcall CreatePointLight(TESObjectLIGH *lightForm, NiNode *destParent)
 {
@@ -3121,6 +3125,19 @@ __declspec(naked) NiPointLight* __fastcall CreatePointLight(TESObjectLIGH *light
 	}
 }
 
+
+void __fastcall AddPointLights(NiNode* objNode)
+{
+	objNode->AddPointLights();
+}
+
+
+void __fastcall SetLightProperties(NiPointLight* ptLight, TESObjectLIGH* lightForm)
+{
+	ptLight->SetLightProperties(lightForm);
+}
+
+/*
 __declspec(naked) void __fastcall SetLightProperties(NiPointLight *ptLight, TESObjectLIGH *lightForm)
 {
 	__asm
@@ -3146,7 +3163,9 @@ __declspec(naked) void __fastcall SetLightProperties(NiPointLight *ptLight, TESO
 		DUP_3(EMIT_DW(0x3B808081)) EMIT_DW(0x3F800000)
 	}
 }
+*/
 
+/*
 __declspec(naked) void __fastcall AddPointLights(NiNode *objNode)
 {
 	__asm
@@ -3198,7 +3217,7 @@ __declspec(naked) void __fastcall AddPointLights(NiNode *objNode)
 		retn
 	}
 }
-
+*/
 __declspec(naked) void __fastcall HidePointLights(NiNode *objNode)
 {
 	__asm
@@ -3244,7 +3263,7 @@ typedef Map<char*, NiFixedString, 2> DataStrings;
 typedef Map<NiFixedString, DataStrings, 2> NodeNamesMap;
 TempObject<UnorderedMap<TESForm*, NodeNamesMap>> s_insertNodeMap, s_attachModelMap;
 
-__declspec(naked) void __fastcall DoInsertNode(NiAVObject *targetObj, const char *nodeName, const char *nameStr, NiNode *rootNode)
+__declspec(naked) void __fastcall DoInsertNode_Old(NiAVObject *targetObj, const char *nodeName, const char *nameStr, NiNode *rootNode)
 {
 	__asm
 	{
@@ -3313,7 +3332,7 @@ __declspec(naked) void __fastcall DoInsertNode(NiAVObject *targetObj, const char
 	}
 }
 
-__declspec(naked) void __fastcall DoInsertNodes(TESForm *form, int, NiNode *rootNode)
+__declspec(naked) void __fastcall DoInsertNodes_Old(TESForm *form, int, NiNode *rootNode)
 {
 	__asm
 	{
@@ -3362,7 +3381,7 @@ __declspec(naked) void __fastcall DoInsertNodes(TESForm *form, int, NiNode *root
 		push	dword ptr [edi+4]
 		mov		edx, [edi]
 		mov		ecx, [ebp-0xC]
-		call	DoInsertNode
+		call	DoInsertNode_Old
 		add		edi, 8
 		jmp		insHead
 		ALIGN 16
@@ -3387,7 +3406,7 @@ __declspec(naked) NiNode* __fastcall LoadModelCopy(const char *filePath)
 		push	ecx
 		mov		eax, g_modelLoader
 		mov		ecx, [eax]
-		CALL_EAX(0x4493D0)
+		__asm mov eax, 0x4493D0 __asm call eax
 		test	al, al
 		pop		eax
 		jnz		hasModel
@@ -3398,14 +3417,14 @@ __declspec(naked) NiNode* __fastcall LoadModelCopy(const char *filePath)
 		push	0
 		push	dword ptr [ebp-4]
 		lea		ecx, [ebp-0x48]
-		CALL_EAX(0x43C6E0)
+			__asm mov eax, 0x43C6E0 __asm call eax
 		or		byte ptr [eax+0x3C], 0x10
 		mov		ecx, eax
-		CALL_EAX(0x43CCF0)
+			__asm mov eax, 0x43CCF0 __asm call eax
 		lea		ecx, [ebp-0x48]
-		CALL_EAX(0x43D180)
+			__asm mov eax, 0x43D180 __asm call eax
 		lea		ecx, [ebp-0x48]
-		CALL_EAX(0x43C830)
+			__asm mov eax, 0x43C830 __asm call eax
 		mov		eax, [ebp-0x18]
 		test	eax, eax
 		jz		done
@@ -3501,7 +3520,8 @@ __declspec(naked) void __fastcall AppendBlockNameSuffixes(NiNode *node)
 	}
 }
 
-__declspec(naked) NiNode* __fastcall DoAttachModel(NiAVObject *targetObj, const char *modelPath, NiFixedString *nameStr, NiNode *rootNode)
+
+__declspec(naked) NiNode* __fastcall DoAttachModel_Old(NiAVObject *targetObj, const char *modelPath, NiFixedString *nameStr, NiNode *rootNode)
 {
 	__asm
 	{
@@ -3551,8 +3571,8 @@ __declspec(naked) NiNode* __fastcall DoAttachModel(NiAVObject *targetObj, const 
 		mov		ecx, [ebp-4]
 		mov		eax, [ecx]
 		call	dword ptr [eax+0xDC]
-		/*mov		ecx, [ebp-0xC]
-		CALL_EAX(0xA5A040)*/
+		//mov		ecx, [ebp-0xC]
+		//CALL_EAX(0xA5A040)
 		push	offset kNiUpdateData
 		mov		ecx, [ebp-4]
 		mov		eax, [ecx]
@@ -3578,7 +3598,11 @@ __declspec(naked) NiNode* __fastcall DoAttachModel(NiAVObject *targetObj, const 
 	}
 }
 
-__declspec(naked) void __fastcall DoAttachModels(TESForm *form, int, NiNode *rootNode)
+
+//Version 57.41
+extern void DoAttachModels_New(TESForm* form, NiNode* rootNode);
+
+__declspec(naked) void __fastcall DoAttachModels_Old(TESForm *form, int, NiNode *rootNode)
 {
 	__asm
 	{
@@ -3631,7 +3655,7 @@ __declspec(naked) void __fastcall DoAttachModels(TESForm *form, int, NiNode *roo
 		add		edi, 4
 		push	edi
 		mov		ecx, [ebp-0xC]
-		call	DoAttachModel
+		call	DoAttachModel_Old
 		add		edi, 4
 		jmp		insHead
 		ALIGN 16
@@ -3644,9 +3668,22 @@ __declspec(naked) void __fastcall DoAttachModels(TESForm *form, int, NiNode *roo
 	}
 }
 
-bool s_insertObjects = false;
+bool s_insertObjects = true;
 
-__declspec(naked) void __fastcall DoInsertObjects(TESForm *form1, TESForm *form2, NiNode *rootNode)
+//Version 57.41
+void __fastcall DoInsertObjects_New(TESForm* form1, TESForm* form2, NiNode* rootNode) {
+	// insert-node phase
+
+		if (form1) {
+			DoAttachModels_New(form1, rootNode);
+		}
+		if (form2) {
+			DoAttachModels_New(form2, rootNode);
+		}
+
+}
+
+__declspec(naked) void __fastcall DoInsertObjects_Old(TESForm *form1, TESForm *form2, NiNode *rootNode)
 {
 	__asm
 	{
@@ -3659,7 +3696,7 @@ __declspec(naked) void __fastcall DoInsertObjects(TESForm *form1, TESForm *form2
 		test	byte ptr [esi+6], kHookFormFlag6_InsertNode
 		jz		nodeForm2
 		push	dword ptr [esp+0xC]
-		call	DoInsertNodes
+		call	DoInsertNodes_Old
 	nodeForm2:
 		test	edi, edi
 		jz		doModels
@@ -3667,7 +3704,7 @@ __declspec(naked) void __fastcall DoInsertObjects(TESForm *form1, TESForm *form2
 		jz		doModels
 		push	dword ptr [esp+0xC]
 		mov		ecx, edi
-		call	DoInsertNodes
+		call	DoInsertNodes_Old
 	doModels:
 		cmp		s_attachModelMap+8, 0
 		jz		done
@@ -3675,7 +3712,7 @@ __declspec(naked) void __fastcall DoInsertObjects(TESForm *form1, TESForm *form2
 		jz		modelForm2
 		push	dword ptr [esp+0xC]
 		mov		ecx, esi
-		call	DoAttachModels
+		call	DoAttachModels_Old
 	modelForm2:
 		test	edi, edi
 		jz		done
@@ -3683,7 +3720,7 @@ __declspec(naked) void __fastcall DoInsertObjects(TESForm *form1, TESForm *form2
 		jz		done
 		push	dword ptr [esp+0xC]
 		mov		ecx, edi
-		call	DoAttachModels
+		call	DoAttachModels_Old
 	done:
 		pop		edi
 		pop		esi
@@ -3715,6 +3752,149 @@ __declspec(naked) void CreateObjectNodeHook()
 	}
 }
 
+namespace ThreadTasks {
+
+	// g_TLSIndex is the index xNVSE uses for its thread‐local data block
+	static DWORD kTlsIndex = g_TLSIndex;
+	// Within that block, the current BSTask* lives at byte offset 692.
+	static constexpr size_t kTaskOffset = 692;
+
+	/*
+	inline BSTask* GetCurrent()
+	{
+		void* tlsBase = TlsGetValue(kTlsIndex);
+		return *reinterpret_cast<BSTask**>(reinterpret_cast<uint8_t*>(tlsBase) + kTaskOffset);
+	}*/
+
+	inline BSTask* GetCurrent()
+	{
+		// Grab the head of the TLS array from fs:[0x2C]
+		auto tlsArray = reinterpret_cast<uint8_t*>(__readfsdword(0x2C));
+
+		// Read the per‑thread block pointer at g_TLSIndex
+		auto threadBlock = *reinterpret_cast<uint8_t**>(tlsArray + g_TLSIndex * sizeof(void*));
+
+		// Finally, at offset 0x2B4 inside that block is our BSTask*
+		return *reinterpret_cast<BSTask**>(threadBlock + kTaskOffset);
+	}
+
+	/*
+	inline void SetCurrent(BSTask* t)
+	{
+		void* tlsBase = TlsGetValue(kTlsIndex);
+		*reinterpret_cast<BSTask**>(reinterpret_cast<uint8_t*>(tlsBase) + kTaskOffset) = t;
+	}*/
+
+	inline void SetCurrent(BSTask* task)
+	{
+		// get fs:[0x2C]
+		auto tlsArray = reinterpret_cast<uint8_t*>(__readfsdword(0x2C));
+		// get the per‑thread block pointer
+		auto threadBlock = *reinterpret_cast<uint8_t**>(tlsArray + g_TLSIndex * sizeof(void*));
+		// store at +0x2B4
+		*reinterpret_cast<BSTask**>(threadBlock + kTaskOffset) = task;
+	}
+}
+
+void __fastcall DoQueuedReferenceHook(QueuedReference* qr)
+{
+	// skip the “type 6” tasks
+	if (qr->unk0C == 6)
+		return;
+
+	// swap out the thread’s current BSTask*
+	//BSTask* prev = ThreadTasks::GetCurrent();
+	//ThreadTasks::SetCurrent(qr->task18);
+
+	// grab the objects we’ll work with
+	TESObjectREFR* refr = qr->refr;
+	ModelLoader* loader = ModelLoader::GetSingleton();
+	TESObjectCELL* cell = refr->parentCell;
+
+	// if not deleted & not disabled, enter the cell’s load‑lock & render
+	if (!refr->IsDeleted() && !refr->GetDisabled() && cell) {
+		cell->RefLockEnter();
+
+		if (cell->loadingStage >= TESObjectCELL::kState_Loading) {
+			if (qr->model)
+				loader->AttachReferenceModel(refr, qr->model->niNode);
+
+			loader->ProcessQueuedReference(
+				refr,
+				cell,
+				qr,
+				false
+			);
+		}
+	}
+
+	// remove from the ref‐map
+	loader->refMap1->EraseKey(refr);
+
+	// update cell counters & per‑ref flags, insert‐objects, lights…
+	if (cell) {
+		// queuedRefCount
+		if (InterlockedDecrement(&cell->queuedRefCount) < 0)
+			cell->queuedRefCount = 0;
+
+		// criticalQueuedRefCount (skip true Actors)
+		if (!refr->IsActor() && InterlockedDecrement(&cell->criticalQueuedRefCount) < 0)
+		{
+			cell->criticalQueuedRefCount = 0;
+		}
+
+		// any per‑ref render flags?
+		if (NiNode* root = refr->GetRefNiNode()) {
+			auto& fadeNode = refr->JIPRefFlags();
+
+			// fade‑reset (kHookRefFlag5F_Update3D == bit 0)
+			//if (fadeNode & kHookRefFlag5F_Update3D) {
+				//fadeNode &= ~kHookRefFlag5F_Update3D;
+				//if (root->GetFadeNode() == g_defaultGetFadeNode) {
+					//_mm_storel_ps(
+						//reinterpret_cast<double*>(&root[1].m_blockName),
+						//_mm_loadl_epi64(
+							//reinterpret_cast<const __m128i*>(&g_defaultFadeValue)
+						//)
+					//);
+				//}
+			//}
+
+			// collision toggle (kHookRefFlag5F_DisableCollision == bit 1)
+			if (fadeNode & kHookRefFlag5F_DisableCollision)
+				refr->ToggleCollision(false);
+
+			// optional “insert objects” (kHookFormFlag6_InsertObject == 0x40|0x80)
+			if (s_insertObjects) {
+				if (auto* base2 = refr->GetBaseForm2()) {
+					constexpr UInt8 mask = kHookFormFlag6_InsertObject;
+					if ((refr->jipFormFlags6 | base2->jipFormFlags6) & mask) {
+						DoInsertObjects_New(refr, base2, root);
+						if (refr->refID == 20 && refr->mods.m_listHead.next) {
+							auto* next = reinterpret_cast<NiNode*>(
+								refr->mods.m_listHead.next
+								);
+							DoInsertObjects_New(refr, nullptr, next);
+						}
+					}
+				}
+			}
+
+			// point‑lights
+			if (root->m_flags & NiAVObject::kNiFlag_IsPointLight)
+				root->AddPointLights();
+		}
+
+		// leave the cell’s load‑lock
+		cell->RefLockLeave();
+	}
+
+	// restore the thread’s BSTask*
+	//ThreadTasks::SetCurrent(prev);
+
+}
+
+/*
 __declspec(naked) void __fastcall DoQueuedReferenceHook(QueuedReference *queuedRef)
 {
 	__asm
@@ -3813,7 +3993,7 @@ __declspec(naked) void __fastcall DoQueuedReferenceHook(QueuedReference *queuedR
 		push	esi
 		mov		edx, eax
 		mov		ecx, edi
-		call	DoInsertObjects
+		call	DoInsertObjects_Old
 		cmp		dword ptr [edi+0xC], 0x14
 		jnz		doLights
 		mov		eax, [edi+0x694]
@@ -3822,7 +4002,7 @@ __declspec(naked) void __fastcall DoQueuedReferenceHook(QueuedReference *queuedR
 		push	eax
 		xor		edx, edx
 		mov		ecx, edi
-		call	DoInsertObjects
+		call	DoInsertObjects_Old
 	doLights:
 		test	byte ptr [esi+0x33], 0x20
 		jz		cellUnlock
@@ -3845,6 +4025,7 @@ __declspec(naked) void __fastcall DoQueuedReferenceHook(QueuedReference *queuedR
 		retn
 	}
 }
+*/
 
 __declspec(naked) void LoadBip01SlotHook()
 {
@@ -3875,7 +4056,7 @@ __declspec(naked) void LoadBip01SlotHook()
 		mov		[eax+8], edx
 		push	eax
 		xor		edx, edx
-		call	DoInsertObjects
+		call	DoInsertObjects_New
 	doLights:
 		cmp		[ebp-0xE], 0
 		jnz		done
@@ -3907,7 +4088,7 @@ __declspec(naked) void LoadWeaponSlotHook()
 		jz		doLights
 		push	eax
 		xor		edx, edx
-		call	DoInsertObjects
+		call	DoInsertObjects_New
 	doLights:
 		mov		ecx, [ebp-0x14]
 		test	byte ptr [ecx+0x33], 0x20
@@ -4134,6 +4315,124 @@ __declspec(naked) void __fastcall UpdateAnimatedLightHook(TESObjectLIGH *lightFo
 		retn	8
 	}
 }
+
+//-----------------------------------------------------------------------------
+// Raw addresses from the ASM, given names here for clarity
+//-----------------------------------------------------------------------------
+static uint32_t& g_shadowSceneFrame = *reinterpret_cast<uint32_t*>(0x11C56E8);
+
+// SCENE_LIGHTS_CS is the address of a LightCS instance
+static LightCS* sceneLightsCS = reinterpret_cast<LightCS*>(SCENE_LIGHTS_CS);
+
+// Grid updater routines
+using GridUpdateFn = void(__fastcall*)(GridCellArray*);
+static GridUpdateFn UpdateExteriorCells = reinterpret_cast<GridUpdateFn>(0x4BABA0);
+static GridUpdateFn UpdateInteriorCells = reinterpret_cast<GridUpdateFn>(0x553820);
+
+// LightingData allocator/initer
+inline LightingData* AllocateLightingData()
+{
+	return CdeclCall<LightingData*>(0xAA13E0, /*size=*/592);
+}
+inline LightingData* InitLightingData(LightingData* ptr)
+{
+	return ThisCall<LightingData*>(0xB9FDA0, ptr);
+}
+
+//-----------------------------------------------------------------------------
+// Compile‑time checks for our offsets
+//-----------------------------------------------------------------------------
+static_assert(offsetof(NiDynamicEffect, resetTraits) == 0x9E, "resetTraits offset wrong");
+static_assert(offsetof(NiDynamicEffect, extraFlags) == 0x9F, "extraFlags offset wrong");
+static_assert(offsetof(NiPointLight, baseLight) == 0xE8, "baseLight offset wrong");
+static_assert(offsetof(NiPointLight, vector100) == 0x100, "vector100 offset wrong");
+static_assert(offsetof(TESObjectLIGH, lightFlags) == 0xA8, "lightFlags offset wrong");
+
+/*
+void __fastcall UpdateAnimatedLightsHook(TES* pTES)
+{
+	// Reset the per‑frame shadow counter
+	g_shadowSceneFrame = 0;
+
+	// Update interior vs exterior grid
+	TESObjectCELL* interior = pTES->currentInterior;
+	GridCellArray* grid = pTES->gridCellArray;
+
+	if (interior) {
+		grid = reinterpret_cast<GridCellArray*>(interior);
+		UpdateInteriorCells(grid);
+	}
+	else {
+		UpdateExteriorCells(grid);
+	}
+
+	// Grab our active point‑lights (note the () on s_activePtLights)
+	auto& lights = s_activePtLights;       // Vector<NiPointLight*>&
+	uint32_t count = lights->Size();
+	if (count == 0)
+		return;
+
+	// Enter the scene‑lights CS
+	sceneLightsCS->Enter();
+
+	// Walk backwards so removals don’t break the loop
+	NiPointLight** arr = lights->Data();
+	for (int32_t i = int32_t(count) - 1; i >= 0; --i) {
+		NiPointLight* light = arr[i];
+
+		// — free branch: only if orphaned *and* refCount == 0
+		if (light->m_parent == nullptr && light->m_uiRefCount == 0) {
+			light->Free();           // matches the 0xAA1460 call
+			lights->RemoveNth(i);
+			continue;
+		}
+
+		// — skip if already initialized this frame
+		//if (light->m_flags & NiAVObject::kNiFlag_DoneInitLights)
+			//continue;
+
+		// — resetTraits?
+		if (light->resetTraits) {
+			light->resetTraits = false;
+			light->SetLightProperties(light->baseLight);
+
+			if (light->extraFlags & 1) {
+				light->extraFlags &= ~1;
+				light->m_transformLocal.translate = static_cast<NiVector3>(light->vector100);
+				light->m_transformLocal.scale = light->vector100.w;
+			}
+		}
+
+		// — shadow‐generator branch for true point‑lights
+		if (light->effectType == NiDynamicEffect::kEffect_PointLight) {
+			LightingData* lightData = AllocateLightingData();
+			lightData = InitLightingData(lightData);
+
+			lightData->isShadowCasting = true;
+			lightData->light = light;
+			lightData->isPointLight = true;
+			lightData->isAmbientLight = false;
+			lightData->isDynamic = (light->baseLight->lightFlags & TESObjectLIGH::kFlag_Dynamic) != 0;
+			lightData->centrePos = light->WorldTranslate();
+			lightData->portalGraph = g_shadowSceneNode->portalGraph;
+
+			g_shadowSceneNode->sceneLights.Append(lightData);
+		}
+		// — animated‑light branch (flicker/pulse/etc)
+		else if (auto* form = light->baseLight;
+			form && (form->lightFlags & 0x19C8) != 0)
+		{
+			DoUpdateAnimatedLight(form, light);
+		}
+
+		// mark done so we don’t re‑init until next tick
+		light->m_flags |= NiAVObject::kNiFlag_DoneInitLights;
+	}
+
+	// Leave the scene‑lights CS
+	sceneLightsCS->Leave();
+}
+*/
 
 __declspec(naked) void __fastcall UpdateAnimatedLightsHook(TES *pTES)
 {

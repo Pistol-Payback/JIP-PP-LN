@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // 08
 struct NiRTTI
@@ -42,28 +42,14 @@ struct NiVector3
 {
 	float	x, y, z;
 
-	NiVector3() {}
+	NiVector3() noexcept
+		: x(0.0f), y(0.0f), z(0.0f) {}
+
 	__forceinline NiVector3(float _x, float _y, float _z) : x(_x), y(_y), z(_z) {}
 	__forceinline NiVector3(const NiVector3 &rhs) {*this = rhs;}
 	__forceinline explicit NiVector3(const NiMatrix33 &rhs) {*this = rhs;}
 	__forceinline explicit NiVector3(const NiQuaternion &rhs) {*this = rhs;}
 	__forceinline explicit NiVector3(const __m128 rhs) {SetPS(rhs);}
-
-	__forceinline void operator=(NiVector3 &&rhs)
-	{
-		x = rhs.x;
-		y = rhs.y;
-		z = rhs.z;
-	}
-	__forceinline void operator=(const NiVector3 &rhs)
-	{
-		_mm_storeu_si64(this, _mm_loadu_si64(&rhs));
-		z = rhs.z;
-	}
-	__forceinline void operator=(const NiPoint2 &rhs) {_mm_storeu_si64(this, _mm_castps_si128(rhs.PS()));}
-
-	void operator=(const NiMatrix33 &from);
-	void operator=(const NiQuaternion &from);
 
 	__forceinline NiVector3& SetPS(const __m128 rhs)
 	{
@@ -72,8 +58,34 @@ struct NiVector3
 		return *this;
 	}
 
-	__forceinline __m128 operator+(__m128 packedPS) const {return PS() + packedPS;}
-	__forceinline __m128 operator-(__m128 packedPS) const {return PS() - packedPS;}
+	//Assignment
+		__forceinline void operator=(NiVector3 &&rhs)
+		{
+			x = rhs.x;
+			y = rhs.y;
+			z = rhs.z;
+		}
+		__forceinline void operator=(const NiVector3 &rhs)
+		{
+			_mm_storeu_si64(this, _mm_loadu_si64(&rhs));
+			z = rhs.z;
+		}
+		__forceinline void operator=(const NiPoint2 &rhs) {_mm_storeu_si64(this, _mm_castps_si128(rhs.PS()));}
+		void operator=(const NiMatrix33& from);
+		void operator=(const NiQuaternion& from);
+
+	//Operators
+
+	__forceinline __m128 operator+(__m128 packedPS) const { return PS() + packedPS; }
+	__forceinline NiVector3 operator+(const NiVector3& o) const noexcept {
+		return NiVector3(_mm_add_ps(PS(), o.PS()));
+	}
+
+	__forceinline __m128 operator-(__m128 packedPS) const { return PS() - packedPS; }
+	__forceinline NiVector3 operator-(const NiVector3& o) const noexcept {
+		return NiVector3(_mm_sub_ps(PS(), o.PS()));
+	}
+
 	__forceinline __m128 operator*(float s) const {return PS() * _mm_set_ps1(s);}
 	__forceinline __m128 operator*(__m128 packedPS) const {return PS() * packedPS;}
 
@@ -710,7 +722,8 @@ public:
 	UInt16		numObjs;		// 0C - init'd to 0
 	UInt16		growSize;		// 0E - init'd to size of preallocation
 
-	T_Data operator[](UInt32 idx) {return data[idx];}
+	T_Data  operator[](UInt32 idx) const { return data[idx]; }
+	T_Data& operator[](UInt32 idx) { return data[idx]; }
 
 	UInt16 Size() const {return firstFreeEntry;}
 	bool Empty() const {return !firstFreeEntry;}
@@ -750,6 +763,13 @@ public:
 	};
 
 	Iterator Begin() {return Iterator(*this);}
+
+	// simple forward‐iterator support
+	T_Data* begin() { return data; }
+	T_Data* end() { return data + firstFreeEntry; }
+	const T_Data* begin() const { return data; }
+	const T_Data* end()   const { return data + firstFreeEntry; }
+
 };
 
 // 18

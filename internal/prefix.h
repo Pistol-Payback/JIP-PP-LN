@@ -444,6 +444,8 @@ struct NiTransform;
 struct hkQuaternion;
 struct hkMatrix3x4;
 
+#include "p_plus/pPrefix.hpp"
+
 #include "internal/version.h"
 #include "internal/base_defs.h"
 #include "internal/class_vtbls.h"

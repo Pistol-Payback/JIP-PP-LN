@@ -1,78 +1,92 @@
 #pragma once
+#include "p_plus/pBitMask.hpp"
 
 SInt32 __fastcall GetFormCount(TESContainer::FormCountList *formCountList, ContChangesEntryList *objList, TESForm *form);
+
+struct GetRootNodeMask : public pBitMask<UInt32> {
+
+	enum eGetRootNode : UInt32 {
+		kNone = 0,
+		kThirdPerson = 1 << 0,
+		kFirstPerson = 1 << 1,
+		kBoth = kFirstPerson | kThirdPerson
+	};
+
+	using pBitMask<UInt32>::pBitMask;
+
+};
 
 // 68
 class TESObjectREFR : public TESForm
 {
 public:
-	/*138*/virtual bool		GetStartingPosition(NiVector3 *outPos, NiVector3 *outRot, TESForm **outWrldOrCell, TESForm *defaultWrldOrCell);
-	/*13C*/virtual void		SayTopic(Sound *sound, TESTopic *topic, TESObjectREFR *target, bool dontUseNiNode, bool notVoice, bool useLipFile, UInt8 unused, bool subtitles);
-	/*140*/virtual void		Unk_50(void);
-	/*144*/virtual void		DamageObject(float damage, bool allowDestroyed);
-	/*148*/virtual bool		GetCastsShadows();
-	/*14C*/virtual void		SetCastsShadows(bool doSet);
-	/*150*/virtual void		Unk_54(void);
-	/*154*/virtual void		Unk_55(void);
-	/*158*/virtual void		Unk_56(void);
-	/*15C*/virtual bool		IsObstacle();
-	/*160*/virtual bool		BaseIsQuestItem();
-	/*164*/virtual void		Unk_59(void);
-	/*168*/virtual void		Unk_5A(void);
-	/*16C*/virtual void		Unk_5B(void);
-	/*170*/virtual void		Unk_5C(void);
-	/*174*/virtual void		Unk_5D(void);
-	/*178*/virtual void		RefreshDynamicLight();
-	/*17C*/virtual TESObjectREFR	*RemoveItem(TESForm *toRemove, BaseExtraList *extraList, UInt32 quantity, bool keepOwner, bool drop, TESObjectREFR *destRef, UInt32 unk6, UInt32 unk7, bool unk8, bool unk9);
-	/*180*/virtual void		Unk_60(void);
-	/*184*/virtual bool		LoadEquipedItem3D(TESForm *item, UInt32 count, ExtraDataList *xData, bool lockEquip);
-	/*188*/virtual void		Unk_62(void);
-	/*18C*/virtual void		Unk_63(void);
-	/*190*/virtual void		AddItem(TESForm *item, ExtraDataList *xDataList, UInt32 quantity);
-	/*194*/virtual void		Unk_65(void);
-	/*198*/virtual MagicCaster	*GetMagicCaster();
-	/*19C*/virtual MagicTarget	*GetMagicTarget();
-	/*1A0*/virtual bool		GetIsChildSize(bool checkHeight);		// 068 Actor: GetIsChildSize
-	/*1A4*/virtual UInt32	GetActorUnk0148();			// result can be interchanged with baseForm, so TESForm* ?
-	/*1A8*/virtual void		SetActorUnk0148(UInt32 arg1);
-	/*1AC*/virtual BSFaceGenNiNode	*GetFaceGenNodeBiped(UInt32 arg1);
-	/*1B0*/virtual BSFaceGenNiNode	*GetFaceGenNodeSkinned(UInt32 arg1);
-	/*1B4*/virtual BSFaceGenNiNode	*CallGetFaceGenNodeSkinned(UInt32 arg1);	// REFR: calls 006C
-	/*1B8*/virtual BSFaceGenAnimationData	*CreateFaceAnimationData(UInt32 arg1);
-	/*1BC*/virtual void		Unk_6F(void);
-	/*1C0*/virtual bool		Unload3D();
-	/*1C4*/virtual void		AnimateNiNode();
-	/*1C8*/virtual NiNode	*GenerateNiNode(bool arg1);
-	/*1CC*/virtual void		Set3D(NiNode* niNode, bool unloadArt);
-	/*1D0*/virtual NiNode	*GetNiNode_v();
-	/*1D4*/virtual void		Unk_75(void);
-	/*1D8*/virtual NiVector3	*GetMinBounds(NiVector3 *outBounds);
-	/*1DC*/virtual NiVector3	*GetMaxBounds(NiVector3 *outBounds);
-	/*1E0*/virtual void		UpdateAnimation();
-	/*1E4*/virtual AnimData	*GetAnimData();			// 0079
-	/*1E8*/virtual BipedAnim	*GetBipedAnim();	// 007A	Character only
-	/*1EC*/virtual BipedAnim	*CallGetBipedAnim();
-	/*1F0*/virtual void		SetBipedAnim(BipedAnim *bipedAnims);
-	/*1F4*/virtual NiVector3	*GetPos();
-	/*1F8*/virtual void		Unk_7E(UInt32 arg0);
-	/*1FC*/virtual void		Unk_7F(void);
-	/*200*/virtual void		Unk_80(UInt32 arg0);
-	/*204*/virtual void		Unk_81(UInt32 arg0);
-	/*208*/virtual void		Unk_82(void);
-	/*20C*/virtual NiNode	*GetProjectileNode();
-	/*210*/virtual void		SetProjectileNode(NiNode *node);
-	/*214*/virtual UInt32	GetSitSleepState();			
-	/*218*/virtual bool		IsCharacter();			// return false for Actor and Creature, true for character and PlayerCharacter
-	/*21C*/virtual bool		IsCreature();
-	/*220*/virtual bool		IsExplosion();
-	/*224*/virtual bool		IsProjectile() const;
-	/*228*/virtual void		SetParentCell(TESObjectCELL *cell);			// SetParentCell (Interior only ?)
-	/*22C*/virtual bool		HasHealth(bool arg0);	// HasHealth (baseForm health > 0 or Flags bit23 set)
-	/*230*/virtual bool		GetHasKnockedState();
-	/*234*/virtual bool		GetIsParalyzed();
-	/*238*/virtual void		Unk_8E(void);
-	/*23C*/virtual void		Unk_8F(void);
-	/*240*/virtual void		MoveToHighProcess();
+	/*138*/virtual bool						GetStartingPosition(NiVector3 *outPos, NiVector3 *outRot, TESForm **outWrldOrCell, TESForm *defaultWrldOrCell);
+	/*13C*/virtual void						SayTopic(Sound *sound, TESTopic *topic, TESObjectREFR *target, bool dontUseNiNode, bool notVoice, bool useLipFile, UInt8 unused, bool subtitles);
+	/*140*/virtual void						Unk_50(void);
+	/*144*/virtual void						DamageObject(float damage, bool allowDestroyed);
+	/*148*/virtual bool						GetCastsShadows();
+	/*14C*/virtual void						SetCastsShadows(bool doSet);
+	/*150*/virtual void						Unk_54(void);
+	/*154*/virtual void						Unk_55(void);
+	/*158*/virtual void						Unk_56(void);
+	/*15C*/virtual bool						IsObstacle();
+	/*160*/virtual bool						BaseIsQuestItem();
+	/*164*/virtual void						Unk_59(void);
+	/*168*/virtual void						Unk_5A(void);
+	/*16C*/virtual void						Unk_5B(void);
+	/*170*/virtual void						Unk_5C(void);
+	/*174*/virtual void						Unk_5D(void);
+	/*178*/virtual void						RefreshDynamicLight();
+	/*17C*/virtual TESObjectREFR*			RemoveItem(TESForm *toRemove, BaseExtraList *extraList, UInt32 quantity, bool keepOwner, bool drop, TESObjectREFR *destRef, UInt32 unk6, UInt32 unk7, bool unk8, bool unk9);
+	/*180*/virtual void						Unk_60(void);
+	/*184*/virtual bool						LoadEquipedItem3D(TESForm *item, UInt32 count, ExtraDataList *xData, bool lockEquip);
+	/*188*/virtual void						Unk_62(void);
+	/*18C*/virtual void						Unk_63(void);
+	/*190*/virtual void						AddItem(TESForm *item, ExtraDataList *xDataList, UInt32 quantity);
+	/*194*/virtual void						Unk_65(void);
+	/*198*/virtual MagicCaster*				GetMagicCaster();
+	/*19C*/virtual MagicTarget*				GetMagicTarget();
+	/*1A0*/virtual bool						GetIsChildSize(bool checkHeight);		// 068 Actor: GetIsChildSize
+	/*1A4*/virtual UInt32					GetActorUnk0148();			// result can be interchanged with baseForm, so TESForm* ?
+	/*1A8*/virtual void						SetActorUnk0148(UInt32 arg1);
+	/*1AC*/virtual BSFaceGenNiNode*			GetFaceGenNodeBiped(UInt32 arg1);
+	/*1B0*/virtual BSFaceGenNiNode*			GetFaceGenNodeSkinned(UInt32 arg1);
+	/*1B4*/virtual BSFaceGenNiNode*			CallGetFaceGenNodeSkinned(UInt32 arg1);	// REFR: calls 006C
+	/*1B8*/virtual BSFaceGenAnimationData*	CreateFaceAnimationData(UInt32 arg1);
+	/*1BC*/virtual void						Unk_6F(void);
+	/*1C0*/virtual bool						Unload3D();
+	/*1C4*/virtual void						AnimateNiNode();
+	/*1C8*/virtual NiNode*					GenerateNiNode(bool arg1);
+	/*1CC*/virtual void						Set3D(NiNode* niNode, bool unloadArt);
+	/*1D0*/virtual NiNode*					GetRootNode();
+	/*1D4*/virtual void						Unk_75(void);
+	/*1D8*/virtual NiVector3*				GetMinBounds(NiVector3 *outBounds);
+	/*1DC*/virtual NiVector3*				GetMaxBounds(NiVector3 *outBounds);
+	/*1E0*/virtual void						UpdateAnimation();
+	/*1E4*/virtual AnimData*				GetAnimData();			// 0079
+	/*1E8*/virtual BipedAnim*				GetBipedAnim();	// 007A	Character only
+	/*1EC*/virtual BipedAnim*				CallGetBipedAnim();
+	/*1F0*/virtual void						SetBipedAnim(BipedAnim *bipedAnims);
+	/*1F4*/virtual NiVector3*				GetPos();
+	/*1F8*/virtual void						Unk_7E(UInt32 arg0);
+	/*1FC*/virtual void						Unk_7F(void);
+	/*200*/virtual void						Unk_80(UInt32 arg0);
+	/*204*/virtual void						Unk_81(UInt32 arg0);
+	/*208*/virtual void						Unk_82(void);
+	/*20C*/virtual NiNode*					GetProjectileNode();
+	/*210*/virtual void						SetProjectileNode(NiNode *node);
+	/*214*/virtual UInt32					GetSitSleepState();			
+	/*218*/virtual bool						IsCharacter();			// return false for Actor and Creature, true for character and PlayerCharacter
+	/*21C*/virtual bool						IsCreature();
+	/*220*/virtual bool						IsExplosion();
+	/*224*/virtual bool						IsProjectile() const;
+	/*228*/virtual void						SetParentCell(TESObjectCELL *cell);			// SetParentCell (Interior only ?)
+	/*22C*/virtual bool						HasHealth(bool arg0);	// HasHealth (baseForm health > 0 or Flags bit23 set)
+	/*230*/virtual bool						GetHasKnockedState();
+	/*234*/virtual bool						GetIsParalyzed();
+	/*238*/virtual void						Unk_8E(void);
+	/*23C*/virtual void						Unk_8F(void);
+	/*240*/virtual void						MoveToHighProcess();
 
 	enum
 	{
@@ -174,6 +188,9 @@ public:
 	{
 		return ThisCall<bool>(0x573170, this, actionRef, arg2, arg3, arg4);
 	}
+
+	NiAVObject* findNodeByName(GetRootNodeMask pcNode, const char* blockName);
+
 };
 static_assert(sizeof(TESObjectREFR) == 0x068);
 

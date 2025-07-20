@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	
+	<Type Name="pBitMask&lt;T&gt;">
+		<DisplayString>
+			0b{value,b[sizeof(value)*8]}
+		</DisplayString>
+		<Expand>
+			<Item Name="decimal">        {value,d}      </Item>
+			<Item Name="hexadecimal">    0x{value,x}    </Item>
+			<Item Name="binary (fixed)"> 0b{value,b[sizeof(value)*8]}</Item>
+		</Expand>
+	</Type>
+
+</AutoVisualizer>

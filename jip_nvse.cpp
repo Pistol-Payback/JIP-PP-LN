@@ -447,6 +447,11 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 	/*2339*/REG_CMD(GetWaterTrait);
 	/*233A*/REG_CMD(SetWaterTrait);
 
+	// v??.??
+
+	//	v57.41
+	/*233B*/REG_CMD(SetChallengeType); //FinalCatalyst
+
 #if JIP_DEBUG
 	//RegisterDebugFunctions(nvse);
 #endif
@@ -1420,9 +1425,6 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 	/*2940*/REG_CMD(CalculateShotsPerSec);
 	/*2941*/REG_CMD(IsAttackQueued);
 	/*2942*/REG_CMD(GetReticleTargetLimb);
-
-	//	v57.41
-	/*2943*/REG_CMD(SetChallengeType); //FinalCatalyst
 
 	//===========================================================
 

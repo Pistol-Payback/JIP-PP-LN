@@ -385,7 +385,7 @@ bool Hook_GetModelPath_Execute(COMMAND_ARGS)
 
 bool __fastcall IsJIPAlias(const char *pluginName)
 {
-	return !StrCompareCI(pluginName, "JIP NVSE Plugin") || !StrCompareCI(pluginName, "lutana_nvse") || StrBeginsCI(pluginName, "JIP LN NVSE");
+	return !StrCompareCI(pluginName, "JIP PP LN") || !StrCompareCI(pluginName, "JIP NVSE Plugin") || !StrCompareCI(pluginName, "lutana_nvse") || StrBeginsCI(pluginName, "JIP LN NVSE");
 }
 
 bool Hook_IsPluginInstalled_Execute(COMMAND_ARGS)

@@ -123,9 +123,9 @@
       <OmitFramePointers>false</OmitFramePointers>
       <IntrinsicFunctions>false</IntrinsicFunctions>
       <Optimization>Disabled</Optimization>
-      <InlineFunctionExpansion>Default</InlineFunctionExpansion>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
-      <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
+      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <StringPooling>true</StringPooling>
       <LanguageStandard>stdcpplatest</LanguageStandard>
@@ -138,6 +138,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <EnableModules>true</EnableModules>
       <BuildStlModules>false</BuildStlModules>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
     </ClCompile>
     <Link>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
@@ -181,6 +182,8 @@
     <ClCompile Include="nvse\GameTiles.cpp" />
     <ClCompile Include="nvse\GameTypes.cpp" />
     <ClCompile Include="nvse\GameUI.cpp" />
+    <ClCompile Include="p_plus\hookGlue.cpp" />
+    <ClCompile Include="p_plus\NiNode.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="functions_jip\jip_fn_actor.h" />
@@ -265,7 +268,6 @@
     <ClInclude Include="internal\utility.h" />
     <ClInclude Include="internal\version.h" />
     <ClInclude Include="internal\xinput.h" />
-    <ClInclude Include="NiFixedString.hpp" />
     <ClInclude Include="nvse\CommandTable.h" />
     <ClInclude Include="nvse\GameAPI.h" />
     <ClInclude Include="nvse\GameBSExtraData.h" />
@@ -286,6 +288,15 @@
     <ClInclude Include="nvse\GameUI.h" />
     <ClInclude Include="nvse\ParamInfos.h" />
     <ClInclude Include="nvse\PluginAPI.h" />
+    <ClInclude Include="p_plus\FormModelHandler.hpp" />
+    <ClInclude Include="p_plus\ModelBuilder.hpp" />
+    <ClInclude Include="p_plus\NiBlockPath.hpp" />
+    <ClInclude Include="p_plus\NiFixedString.hpp" />
+    <ClInclude Include="p_plus\NiRuntimeNode.hpp" />
+    <ClInclude Include="p_plus\pBitMask.hpp" />
+    <ClInclude Include="p_plus\pPrefix.hpp" />
+    <ClInclude Include="p_plus\RuntimeNodeVector.hpp" />
+    <ClInclude Include="p_plus\VectorSortedView.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
@@ -296,7 +307,9 @@
     <ResourceCompile Include="jip_nvse.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="NiFixedString.natvis" />
+    <Natvis Include="p_plus\NiBlockPath.natvis" />
+    <Natvis Include="p_plus\NiFixedString.natvis" />
+    <Natvis Include="p_plus\pBitMask.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

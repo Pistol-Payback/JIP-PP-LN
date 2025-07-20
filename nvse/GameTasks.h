@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 /*******************************************************
 *
@@ -237,8 +237,8 @@ class BSTask
 {
 public:
 	virtual void Destroy(bool doFree);
-	virtual void Run(void);
-	virtual void Unk_02(void);
+	virtual void Run(void);		//0x43CCF0
+	virtual void UpdateBounds(void);	//0x43D180
 	virtual void Unk_03(UInt32 arg0, UInt32 arg1);
 	virtual bool GetDebugDescription(char *outDesc, void *arg1);
 	
@@ -278,7 +278,7 @@ struct Model
 {
 	const char	*path;		// 00
 	UInt32		counter1;	// 04
-	UInt32		counter2;	// 08
+	UInt32		refCount;	// 08
 	NiNode		*niNode;	// 0C
 
 	void Destroy()
@@ -363,28 +363,73 @@ public:
 class QueuedFileEntry : public QueuedFile
 {
 public:
-	virtual bool Unk_0B(void) = 0;
+	virtual bool Unk_0B(void);
 
 	char	* name;		// 028
 	BSAData	* bsaData;	// 02C
+
+	static QueuedFileEntry* create() {
+		return CdeclCall<QueuedFileEntry*>(0x0401000, sizeof(QueuedFileEntry));
+	}
+
 };
 
-// 48
-class QueuedModel : public QueuedFileEntry
-{
+class QueuedModel : public QueuedFileEntry {
+
 public:
+
 	virtual void Unk_0C(UInt32 arg0);
 
-	Model		*model;			// 30
-	TESModel	*tesModel;		// 34
-	UInt32		baseFormClass;	// 38	table at offset : 0x045C708. Pickable, invisible, unpickable ? 6 is VisibleWhenDistant or internal
-	UInt8		flags;			// 3C	bit 0 and bit 1 init'd by parms, bit 2 set after textureSwap, bit 3 is model set, bit 4 is file found.
-	UInt8		pad3D[3];		// 3D
-	float		flt40;			// 40
-	UInt32		unk44;			// 44
+	enum {
+		kInitFlag0 = 1 << 0,		// bit0: first ctor/init flag
+		kInitFlag1 = 1 << 1,		// bit1: second ctor/init flag
+		kTextureSwapped = 1 << 2,	// bit2: after texture swap
+		kModelSet = 1 << 3,			// bit3: model pointer has been set
+		kFileFound = 1 << 4,		// bit4: file was found (raw‑load marker)
+	};
+
+	/*0x30*/ Model*		model;          // written by the loader
+	/*0x34*/ TESModel*	tesModel;      // initialized to 0
+	/*0x38*/ UInt32		baseFormClass;   // table at offset : 0x045C708. Pickable, invisible, unpickable ? 6 is VisibleWhenDistant or internal
+	/*0x3C*/ UInt8		flags;           // bit 0 and bit 1 init'd by parms, bit 2 set after textureSwap, bit 3 is model set, bit 4 is file found.
+	/*0x40*/ float		flt40;				 // set to 0.0f by the fstp
+	/*0x44*/ UInt32		unk44;				// untouched
 
 	// There are at least 3 Create/Initiator
+
+	static QueuedModel* LoadModel(QueuedFileEntry* queued, const char* filePath, UInt32 baseClass, void* refMap, bool flag3CBit0, bool flag3Bit5) {
+		return ThisCall<QueuedModel*>(0x43C6E0, queued, filePath, baseClass, refMap, flag3CBit0, flag3Bit5);
+	};
+
+	bool HasFlag(UInt8 f) const { return (flags & f) != 0; }
+	void SetFlag(UInt8 f) { flags |= f; }
+	void ClearFlag(UInt8 f) { flags &= ~f; }
+
+	static QueuedModel* create() {
+		return CdeclCall<QueuedModel*>(0x0401000, 72);
+	}
+
 };
+
+static constexpr uintptr_t QueuedModel_vftable_addr = 0x01016890;
+
+// A POD that is layout‑ and alignment‑identical to QueuedModel,
+// but isn’t abstract and lets us stack‑allocate it.
+// reserve exactly 0x44 bytes, aligned to 4
+struct alignas(4) QMStack {
+	void* vtbl = reinterpret_cast<void*>(QueuedModel_vftable_addr);
+	uint8_t data[0x44 - sizeof(void*)];  // 0x44 - 4 = 0x40
+};
+static_assert(sizeof(QMStack) == 0x44, "QMStack must be 0x44 bytes");
+
+/*
+struct alignas(QueuedModel) QMStack {
+	void* vtbl = reinterpret_cast<void*>(QueuedModel_vftable_addr);
+	uint8_t  data[sizeof(QueuedModel) - sizeof(void*)];
+};
+static_assert(sizeof(QMStack) == sizeof(QueuedModel), "size mismatch");
+static_assert(alignof(QMStack) == alignof(QueuedModel), "alignment mismatch");
+*/
 
 // 30
 class QueuedTexture : public QueuedFileEntry
@@ -674,9 +719,165 @@ struct ModelLoader
 	{
 		return ThisCall<KFModel*>(0x4471C0, this, kfPath);
 	}
+
+	// Call the “0x4489B0” attach‑model routine
+	__forceinline void AttachReferenceModel(TESObjectREFR* refr, NiNode* node) {
+		ThisCall<NiNode*>(0x4489B0, this, refr, node);
+	}
+
+	// Call the “0x451EF0” queued‑ref callback on TES
+	__forceinline void ProcessQueuedReference(TESObjectREFR* refr, TESObjectCELL* cellCS, QueuedReference* qr, bool flag) {
+		ThisCall<void>(0x451EF0, g_TES, refr, cellCS, qr, flag ? 1 : 0);
+	}
+
+	Model* FindCachedModel(const char* path) {
+		Model* m = nullptr;
+		if (FastCall<unsigned char>(0x4493D0, modelMap, path, &m))
+			return m;
+		return nullptr;
+	}
+
+	/*
+	NiNode* LoadModelCopy(const char* filePath)
+	{
+		Model* baseModel = this->FindCachedModel(filePath);
+		NiNode* root = nullptr;
+
+		if (!baseModel) {
+
+			//QMStack rawQM{};
+			//QueuedModel* qm = reinterpret_cast<QueuedModel*>(&rawQM);
+			QueuedModel* qm = QueuedModel::create();
+			qm = QueuedModel::LoadModel(qm, filePath, 0, nullptr, true, false);
+
+			if (!qm) return nullptr;
+
+			// mark for later cloning
+			qm->SetFlag(QueuedModel::kFileFound);
+
+			// run the three finishers
+			qm->finalizeModel();
+
+			// pull out the Model*
+			baseModel = qm->model;
+			root = baseModel->niNode;
+			if (!baseModel) return nullptr;
+
+		}
+		else {
+			// — cached path
+			root = baseModel->niNode;
+			if (!root) return nullptr;
+		}
+
+		// bump its ref‑count if zero
+		if (baseModel->refCount == 0)
+			InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
+
+		// one‑time InitPointLights
+		if (!(root->m_flags & NiAVObject::kNiFlag_DoneInitLights)) {
+			root->DownwardsInitPointLights(root);
+			root->m_flags |= NiAVObject::kNiFlag_DoneInitLights;
+		}
+
+		// return the cloned copy
+		return static_cast<NiNode*>(root->CreateCopy());
+	}*/
+
 };
 
 extern ModelLoader *g_modelLoader;
+extern NiNode* __fastcall LoadModelCopy(const char* filePath);
+
+struct ModelTemp {
+
+	NiNode*   clonedNode = nullptr;  // your cloned NiNode
+	Model*	  baseModel = nullptr;  // the underlying Model*
+	bool      tapped = false;    // did we bump the refcount?
+
+	NiNode* detachNode() {
+		NiNode* result = clonedNode;
+		clonedNode = nullptr;
+		return result;
+	}
+
+	bool isValid() {
+		return clonedNode != nullptr;
+	}
+
+	explicit ModelTemp(const char* filePath) {
+		load(filePath);
+	}
+	ModelTemp() = default;
+	~ModelTemp() { unload(); }
+
+	/// Attempts to load (or reload) the model. Returns true on success.
+	bool load(const char* filePath) {
+
+		clonedNode = LoadModelCopy(filePath); //Uses asm version for now, because below seems to crash
+
+		return true;
+		unload();  // if something was already loaded
+		// find or raw‑load
+		baseModel = g_modelLoader->FindCachedModel(filePath);
+		NiNode* root = nullptr;
+		if (!baseModel) {
+
+			//QMStack rawQM{};
+			//QueuedModel* qm = reinterpret_cast<QueuedModel*>(&rawQM);
+			//QueuedFile* qm1 = QueuedModel::create();
+
+			QueuedModel* src1 = QueuedModel::create();
+			QueuedModel* qm = QueuedModel::LoadModel((QueuedFileEntry*)src1, filePath, 0, nullptr, true, false);
+
+			if (!qm) return false;
+
+			qm->SetFlag(QueuedModel::kFileFound);
+
+			qm->Run();				//0x43CCF0
+			qm->UpdateBounds();		//0x43D180
+			//ThisCall<void>(0x43CCF0, qm);
+			//ThisCall<void>(0x43D180, qm);
+			ThisCall<void>(0x43C830, qm);
+
+			baseModel = qm->model;
+			root = baseModel->niNode;
+			if (!baseModel) return false;
+		}
+		else {
+			root = baseModel->niNode;
+			if (!root) return false;
+		}
+
+		// bump refcount if first use
+		if (baseModel->refCount == 0) {
+			InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
+			tapped = true;
+		}
+
+		// clone it
+		clonedNode = static_cast<NiNode*>(root->CreateCopy());
+		return clonedNode != nullptr;
+
+	}
+
+	/// Release the clone and undo any refcount bump
+	void unload() {
+		if (clonedNode) {
+			NiReleaseObject(clonedNode);
+			clonedNode = nullptr;
+		}
+		if (clonedNode && tapped) {
+			InterlockedDecrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
+			tapped = false;
+		}
+		baseModel = nullptr;
+	}
+
+	/// Convenience: test if load() succeeded
+	explicit operator bool() const { return clonedNode != nullptr; }
+
+};
 
 class ExteriorCellLoaderTask;
 

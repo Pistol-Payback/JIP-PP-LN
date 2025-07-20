@@ -1,0 +1,11 @@
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="NiBlockPathBase">
+    <DisplayString>Count = {length}</DisplayString>
+    <Expand>
+      <ArrayItems>
+        <Size>length</Size>
+        <ValuePointer>nodes</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+</AutoVisualizer>
