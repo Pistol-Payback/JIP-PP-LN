@@ -1,11 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
-  <Type Name="NiBlockPathBase">
-    <DisplayString>Count = {length}</DisplayString>
-    <Expand>
-      <ArrayItems>
-        <Size>length</Size>
-        <ValuePointer>nodes</ValuePointer>
-      </ArrayItems>
-    </Expand>
-  </Type>
+
+	<!-- NiBlockPathView is not a template -->
+	<Type Name="NiBlockPathView">
+		<DisplayString>length={_length}</DisplayString>
+		<Expand>
+			<ArrayItems>
+				<Size>_length</Size>
+				<ValuePointer>_nodes</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<!-- NiBlockPathBase is also not a template -->
+	<Type Name="NiBlockPathBase">
+		<DisplayString>length={_length}</DisplayString>
+		<Expand>
+			<ArrayItems>
+				<Size>_length</Size>
+				<ValuePointer>_nodes</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<!-- NiBlockPathStatic extends NiBlockPathBase and has a raw string -->
+	<Type Name="NiBlockPathStatic">
+		<DisplayString>length={_length}, raw={raw}</DisplayString>
+		<Expand>
+			<!-- show raw -->
+			<Item Name="raw">raw</Item>
+			<!-- then the array of segments -->
+			<ArrayItems>
+				<Size>_length</Size>
+				<ValuePointer>_nodes</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
 </AutoVisualizer>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<Type Name="VectorSortedView&lt;*,*&gt;">
+		
+		<DisplayString>size={size_}, capacity={capacity_}</DisplayString>
+		<Expand>
+			
+			<ArrayItems>
+				<Size>size_</Size>
+				<ValuePointer>view_</ValuePointer>
+			</ArrayItems>
+			
+			<ArrayItems>
+				<Size>size_</Size>
+				<ValuePointer>storage_</ValuePointer>
+			</ArrayItems>
+			
+		</Expand>
+		
+	</Type>
+	
+</AutoVisualizer>

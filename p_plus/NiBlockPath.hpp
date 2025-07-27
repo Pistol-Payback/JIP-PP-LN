@@ -11,13 +11,31 @@
 
 #include <concepts>
 
+//For portability
+#ifdef _MSC_VER
+#include <malloc.h>
+#define ALLOCA _alloca
+#else
+#include <alloca.h>
+#define ALLOCA alloca
+#endif
+
+//template<typename U>
+//concept PathPart = std::same_as<U, NiFixedString> || std::same_as<U, NiBlockPathBase>;
+
 template<typename U>
-concept PathPart = std::same_as<U, NiFixedString> || std::same_as<U, NiBlockPathBase>;
+concept PathPart =
+std::same_as<std::decay_t<U>, NiFixedString>       // single segment
+|| std::convertible_to<U, const char*>               // C‑strings
+|| std::derived_from<std::decay_t<U>, NiBlockPathBase>;
 
 struct IndexLinkedList {
 
+    IndexLinkedList(NiFixedString childObj) : childObj(childObj) {}
+
     UInt16 previous;
     UInt16 next;
+    NiFixedString childObj;
 
 };
 
@@ -111,18 +129,25 @@ struct NiToken {
 struct NiBlockPathView {
 
 protected:
+
     NiFixedString* _nodes;    // pointer to the first segment
     uint32_t       _length;   // number of segments
 
 public:
+
     // default: empty view
     constexpr NiBlockPathView() noexcept
         : _nodes(nullptr), _length(0)
     {}
 
     // construct from raw pointer+length
-    constexpr NiBlockPathView(NiFixedString* nodes, uint32_t length) noexcept
+    constexpr NiBlockPathView(NiFixedString * nodes, uint32_t length) noexcept
         : _nodes(nodes), _length(length)
+    {}
+
+    constexpr NiBlockPathView(const NiFixedString* nodes, uint32_t length) noexcept
+        : _nodes(const_cast<NiFixedString*>(nodes))
+        , _length(length)
     {}
 
     // iteration
@@ -137,6 +162,58 @@ public:
         }
         return _nodes[_length - 1];
     }
+
+    // for searching existing blocks. we can check the ref count to make sure full path exists
+    bool pathExists() const noexcept {
+        for (auto& seg : *this) {
+            if (seg.refCount() <= 1)
+                return false;
+        }
+        return true;
+    }
+
+    //Suffix-match, checks if the end half of the array matches the entier query.
+    bool containsPathSuffix(const NiBlockPathView& query) const noexcept {
+        if (query._length > _length) return false;
+        uint32_t off = _length - query._length;
+        // pointer-compare is fine because equal strings are interned to identical pointers
+        return std::memcmp(&_nodes[off], query._nodes, query._length * sizeof(NiFixedString)) == 0;
+    }
+
+    bool containsSparsePath(const NiBlockPathView& query) const noexcept {
+
+        if (query.empty())
+            return true;
+
+        if (query._length > _length)
+            return false;
+
+        // scan through nodes[], advancing `need` each time we match
+        std::size_t need = 0;
+        for (std::size_t i = 0; i < _length && need < query._length; ++i) {
+            auto base = _nodes[i];
+            auto toFind = query._nodes[need];
+            if (base == toFind) {
+                ++need;
+            }
+        }
+        return (need == query._length);
+    }
+
+    bool contains(const NiBlockPathView& query) const noexcept {
+
+        if (query.empty() || query._length > _length) return false;
+        // slide a window of size query.length
+        uint32_t window = query._length;
+        for (uint32_t start = 0; start + window <= _length; ++start) {
+            if (std::memcmp(&_nodes[start], query._nodes, window * sizeof(NiFixedString)) == 0)
+                return true;
+        }
+        return false;
+
+    }
+
+    bool contains(const NiBlockPathBuilder& query) const noexcept;
 
     constexpr uint32_t             size()   const noexcept { return _length; }
     constexpr bool                 empty()  const noexcept { return _length == 0; }
@@ -164,7 +241,7 @@ public:
     }
 
     friend NiBlockPathBase;
-    friend NiBlockPath;
+    friend NiBlockPathStatic;
 
 };
 
@@ -174,7 +251,7 @@ struct NiBlockPathBase : public NiBlockPathView {
 public:
     // default: empty
     NiBlockPathBase() noexcept
-        : NiBlockPathView(nullptr, 0)
+        : NiBlockPathView()
     {}
 
     const NiBlockPathView makeView(uint32_t newSize) const {
@@ -208,33 +285,15 @@ public:
     }
 
     template<PathPart... Parts>
-    NiBlockPathBase(const Parts&... parts) {
+    NiBlockPathBase(Parts&&... parts) : NiBlockPathView(static_cast<NiFixedString*>(nullptr), totalSegments(parts...))
+    {
+        if (_length == 0) return;
+        // raw allocate
+        _nodes = static_cast<NiFixedString*>(::operator new[](_length * sizeof(NiFixedString)));
 
-        static_assert((!std::is_pointer_v<Parts> && ...),"NiBlockPathBase: constructor parts must not be pointers");
-
-        // Compute total length
-        _length = (partLength(parts) + ...);
-
-        // Allocate exactly the right buffer
-        if (_length > 0) {
-            _nodes = static_cast<NiFixedString*>(::operator new[](_length * sizeof(NiFixedString)));
-        }
-        else {
-            _nodes = nullptr;
-            return;
-        }
-
-        // Construct in-place from each part
-        uint32_t off = 0;
-        (void)std::initializer_list<int>{
-            (parts
-                ? ( // if non‐empty, construct it in place
-                    new (&_nodes[off++]) NiFixedString(parts),
-                    0         // the comma‐operator yields an int for the init_list
-                    )
-                : 0            // if empty, do nothing
-                )...
-        };
+        uint32_t idx = 0;
+        // fold‑expression to append each “part”
+        (appendPart(std::forward<Parts>(parts), idx), ...);
     }
 
     template<std::input_iterator It> requires std::convertible_to<std::iter_value_t<It>,NiFixedString>
@@ -252,47 +311,6 @@ public:
         }
     }
 
-    // C-string: split on ‘\’ into segments
-    NiBlockPathBase(const char* pathString) {
-
-        if (!pathString || !*pathString) {
-            _nodes = nullptr;
-            _length = 0;
-            return;
-        }
-
-        // count segments
-        uint32_t cnt = 1;
-        for (auto p = pathString; *p; ++p)
-            if (*p == '\\') ++cnt;
-        _length = cnt;
-
-        // allocate raw storage
-        _nodes = static_cast<NiFixedString*>(::operator new[](_length * sizeof(NiFixedString)));
-
-        // 3) split & construct each segment by length
-        uint32_t off = 0;
-        const char* start = pathString;
-        for (const char* p = pathString; ; ++p) {
-            if (*p == '\\' || *p == '\0') {
-
-                size_t segLen = p - start;
-
-                //We lie and modify the string, but restor it after so no one knows. Shhh
-                char saved = *p;
-                const_cast<char*>(p)[0] = '\0';
-                new (&_nodes[off++]) NiFixedString(start);
-                const_cast<char*>(p)[0] = saved;
-
-                if (*p == '\0')
-                    break;
-
-                start = p + 1;
-            }
-        }
-
-    }
-
     ~NiBlockPathBase() {
         for (uint32_t i = 0; i < _length; ++i) {
             _nodes[i].~NiFixedString();
@@ -302,36 +320,78 @@ public:
 
 protected:
 
-    // Only count 1 if seg is non-null
-    static size_t partLength(const NiFixedString& seg) noexcept {
-        return seg ? 1u : 0u;
+    //–– compile‑time segment counting ––
+    static constexpr uint32_t segCount(const char* s) noexcept {
+        if (!s || !*s) return 0;
+        uint32_t c = 1;
+        for (auto p = s; *p; ++p)
+            if (*p == '\\') ++c;
+        return c;
     }
-    // A subpath of length zero contributes nothing
-    static size_t partLength(const NiBlockPathBase& bp) noexcept {
-        return bp._length;
+    static constexpr uint32_t segCount(const NiFixedString&) noexcept { return 1; }
+    static constexpr uint32_t segCount(const NiBlockPathBase& bp) noexcept { return bp._length; }
+
+    template<typename First, typename... Rest>
+    static constexpr uint32_t totalSegments(First&& f, Rest&&... r) noexcept {
+        return segCount(std::forward<First>(f))
+            + totalSegments(std::forward<Rest>(r)...);
+    }
+    static constexpr uint32_t totalSegments() noexcept { return 0; }
+
+    //–– run‑time appending ––
+
+    // C-string: split on ‘\’ into segments
+    void appendPart(const char* s, uint32_t& idx) {
+        if (!s || !*s) return;
+        const char* start = s;
+        for (const char* p = s; ; ++p) {
+            if (*p == '\\' || *p == '\0') {
+                size_t len = p - start;
+                // carve out len+1 bytes on the stack
+                char* buf = static_cast<char*>(ALLOCA(len + 1));
+                memcpy(buf, start, len);
+                buf[len] = '\0';
+                new(&_nodes[idx++]) NiFixedString(buf);
+                if (*p == '\0') break;
+                start = p + 1;
+            }
+        }
+    }
+
+    void appendPart(const NiFixedString& fs, uint32_t& idx) {
+        new(&_nodes[idx++]) NiFixedString(fs);
+    }
+
+    void appendPart(const NiBlockPathBase& bp, uint32_t& idx) {
+        for (uint32_t i = 0; i < bp._length; ++i)
+            new(&_nodes[idx++]) NiFixedString(bp._nodes[i]);
     }
 
 };
 
-struct NiBlockPath : public NiBlockPathBase {
+struct NiBlockPathStatic : public NiBlockPathBase {
+
+    using NiBlockPathBase::contains;
+    using NiBlockPathBase::containsPathSuffix;
+    using NiBlockPathBase::containsSparsePath;
 
     //Original Path
-    std::string raw; //for fast comparision lookups, so we dont need to create a bunch of NiFixedStrings
+    std::string raw; //for fast comparision lookups, so we dont need to create a bunch of NiFixedStrings when comparing a const char* path
 
     //–– ctors / dtor ––
-    NiBlockPath() noexcept
+    NiBlockPathStatic() noexcept
         : NiBlockPathBase()
         , raw()
     {}
 
     // move‐ctor
-    NiBlockPath(NiBlockPath&& other) noexcept
+    NiBlockPathStatic(NiBlockPathStatic&& other) noexcept
         : NiBlockPathBase(std::move(other))   // steals nodes & length
         , raw(std::move(other.raw))           // steals the string
     {}
 
     template<typename It>
-    NiBlockPath(It begin, It end) : NiBlockPathBase(begin, end), raw()
+    NiBlockPathStatic(It begin, It end) : NiBlockPathBase(begin, end), raw()
     {
         if (_length) {
             // Preallocate enough space: sum of node lengths + (length-1) backslashes
@@ -350,7 +410,7 @@ struct NiBlockPath : public NiBlockPathBase {
     }
 
     // from backslash-delimited C‐string "A\B\C"
-    NiBlockPath(const char* pathString) : NiBlockPathBase(), raw(pathString ? pathString : "")
+    NiBlockPathStatic(const char* pathString) : NiBlockPathBase(), raw(pathString ? pathString : "")
     {
         if (raw.empty())
             return;
@@ -372,14 +432,14 @@ struct NiBlockPath : public NiBlockPathBase {
         }
     }
 
-    ~NiBlockPath() = default;
+    ~NiBlockPathStatic() = default;
 
     // disallow copy
-    NiBlockPath(const NiBlockPath&) = delete;
-    NiBlockPath& operator=(const NiBlockPath&) = delete;
+    NiBlockPathStatic(const NiBlockPathStatic&) = delete;
+    NiBlockPathStatic& operator=(const NiBlockPathStatic&) = delete;
 
     //Only allow move
-    NiBlockPath& operator=(NiBlockPath&& other) noexcept {
+    NiBlockPathStatic& operator=(NiBlockPathStatic&& other) noexcept {
         if (this != &other) {
             NiBlockPathBase::operator=(std::move(other));
             raw = std::move(other.raw);
@@ -387,25 +447,8 @@ struct NiBlockPath : public NiBlockPathBase {
         return *this;
     }
 
-    // for searching existing blocks. we can check the ref count to make sure full path exists
-    bool pathExists() const noexcept {
-        for (auto& seg : *this) {
-            if (seg.refCount() <= 1)
-                return false;
-        }
-        return true;
-    }
-
     NiFixedString& operator[](uint32_t i) { return _nodes[i]; }
     const NiFixedString& operator[](uint32_t i) const { return _nodes[i]; }
-
-    //Suffix-match, checks if the end half of the array matches the entier query.
-    bool containsPathSuffix(const NiBlockPathView& query) const noexcept {
-        if (query._length > _length) return false;
-        uint32_t off = _length - query._length;
-        // pointer-compare is fine because equal strings are interned to identical pointers
-        return std::memcmp(&_nodes[off], query._nodes, query._length * sizeof(NiFixedString)) == 0;
-    }
 
     // suffix-match against a raw C-string, e.g. "\\B\\C"
     bool containsPathSuffix(const char* query) const noexcept {
@@ -448,47 +491,124 @@ struct NiBlockPath : public NiBlockPathBase {
         return true;
     }
 
-    bool containsSparsePath(const NiBlockPathView& query) const noexcept {
-
-        if (query.empty() == 0)
-            return true;
-
-        if (query._length > _length)
-            return false;
-
-        // scan through nodes[], advancing `need` each time we match
-        std::size_t need = 0;
-        for (std::size_t i = 0; i < _length && need < query._length; ++i) {
-            if (_nodes[i] == query._nodes[need]) {
-                ++need;
-            }
-        }
-        return (need == query._length);
-    }
-
-    // checks if `query` (as a NiBlockPath) appears as a consecutive segment subsequence
-    bool contains(const NiBlockPath& query) const noexcept {
-
-        if (query.empty() || query._length > _length) return false;
-        // slide a window of size query.length
-        uint32_t window = query._length;
-        for (uint32_t start = 0; start + window <= _length; ++start) {
-            if (std::memcmp(&_nodes[start], query._nodes, window * sizeof(NiFixedString)) == 0)
-                return true;
-        }
-        return false;
-
-    }
-
     bool contains(const char* query) const noexcept {
         if (!query || !*query) return false;
         return raw.find(query) != std::string::npos;
     }
 
     //Full‐path equality
-    bool operator==(const NiBlockPath& rhs) const noexcept {
+    bool operator==(const NiBlockPathStatic& rhs) const noexcept {
         if (_length != rhs._length) return false;
         return std::memcmp(_nodes, rhs._nodes, _length * sizeof(NiFixedString)) == 0;
+    }
+
+    void insertSegment(size_t idx, const NiFixedString& seg) {
+
+        // clamp idx
+        if (idx > _length) idx = _length;
+
+        // update `raw` string:
+        // find byte position in raw where to splice in "seg\\"
+        if (raw.empty()) {
+            raw = seg.CStr();
+        }
+        else {
+            size_t pos = 0;
+            // Locate byte position in raw where to splice "\\seg"
+            if (idx > 0) {
+                size_t count = 0;
+                while (count < idx) {
+                    size_t next = raw.find('\\', pos);
+                    if (next == std::string::npos) {
+                        pos = raw.size();
+                        break;
+                    }
+                    pos = next + 1;
+                    ++count;
+                }
+
+                if (pos > 0 && idx < _length) --pos;
+            }
+            raw.insert(pos, "\\" + std::string(seg.CStr()));
+        }
+
+        //rebuild the nodes array with one extra slot:
+        auto newArr = static_cast<NiFixedString*>(
+            ::operator new[]((_length + 1) * sizeof(NiFixedString))
+        );
+        // copy [0 .. idx)
+        for (size_t i = 0; i < idx; ++i)
+            new(&newArr[i]) NiFixedString(_nodes[i]);
+        // insert the new segment
+        new(&newArr[idx]) NiFixedString(seg);
+        // copy [idx .. oldLength)
+        for (size_t i = idx; i < _length; ++i)
+            new(&newArr[i + 1]) NiFixedString(_nodes[i]);
+
+        // destroy old nodes & swap in the new array
+        for (size_t i = 0; i < _length; ++i)
+            _nodes[i].~NiFixedString();
+        ::operator delete[](_nodes);
+
+        _nodes = newArr;
+        ++_length;
+
+    }
+
+    void replaceSegment(size_t idx, const NiFixedString& newSeg) {
+        if (idx >= _length) return;
+        // replace in-place
+        _nodes[idx].~NiFixedString();
+        new(&_nodes[idx]) NiFixedString(newSeg);
+        // rebuild raw from scratch
+        raw.clear();
+        for (size_t i = 0; i < _length; ++i) {
+            if (i) raw.push_back('\\');
+            raw.append(_nodes[i].CStr());
+        }
+    }
+
+    void removeSegment(size_t idx) {
+        if (idx >= _length) return;
+
+        // 1) Update `raw`
+        if (_length == 1) {
+            raw.clear();
+        }
+        else {
+            // find byte‐offset in raw of the segment
+            size_t start = 0, end = raw.size();
+            // locate start
+            for (size_t i = 0; i < idx; ++i) {
+                start = raw.find('\\', start);
+                if (start == std::string::npos) return;
+                ++start;
+            }
+            // locate end
+            end = raw.find('\\', start);
+            if (end == std::string::npos) end = raw.size();
+            // also eat the separator if it’s not the last segment
+            if (end != raw.size()) ++end;
+            raw.erase(start, end - start);
+        }
+
+        // 2) Rebuild the _nodes array with one fewer slot
+        auto newArr = static_cast<NiFixedString*>(
+            ::operator new[]((_length - 1) * sizeof(NiFixedString))
+            );
+        // copy [0..idx)
+        for (size_t i = 0; i < idx; ++i)
+            new(&newArr[i]) NiFixedString(_nodes[i]);
+        // copy [idx+1..oldLen)
+        for (size_t i = idx + 1; i < _length; ++i)
+            new(&newArr[i - 1]) NiFixedString(_nodes[i]);
+
+        // destroy old & swap
+        for (size_t i = 0; i < _length; ++i)
+            _nodes[i].~NiFixedString();
+        ::operator delete[](_nodes);
+        _nodes = newArr;
+        --_length;
     }
 
 };

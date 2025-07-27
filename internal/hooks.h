@@ -3598,10 +3598,6 @@ __declspec(naked) NiNode* __fastcall DoAttachModel_Old(NiAVObject *targetObj, co
 	}
 }
 
-
-//Version 57.41
-extern void DoAttachModels_New(TESForm* form, NiNode* rootNode);
-
 __declspec(naked) void __fastcall DoAttachModels_Old(TESForm *form, int, NiNode *rootNode)
 {
 	__asm
@@ -3673,13 +3669,22 @@ bool s_insertObjects = true;
 //Version 57.41
 void __fastcall DoInsertObjects_New(TESForm* form1, TESForm* form2, NiNode* rootNode) {
 	// insert-node phase
-
+		NiRuntimeNodeVector* refNodes = nullptr;
+		NiRuntimeNodeVector* baseFormNodes = nullptr;
 		if (form1) {
-			DoAttachModels_New(form1, rootNode);
+
+			refNodes = form1->getRuntimeNodes();
+
+			if (form1->IsPlayer()) {
+				g_thePlayer->node1stPerson->refreshRuntimeNodes(form1->getFirstPersonRuntimeNodes(), nullptr);
+			}
+
 		}
 		if (form2) {
-			DoAttachModels_New(form2, rootNode);
+			baseFormNodes = form2->getRuntimeNodes();
 		}
+
+		rootNode->refreshRuntimeNodes(refNodes, baseFormNodes);
 
 }
 
@@ -3795,7 +3800,7 @@ namespace ThreadTasks {
 		*reinterpret_cast<BSTask**>(threadBlock + kTaskOffset) = task;
 	}
 }
-
+/*
 void __fastcall DoQueuedReferenceHook(QueuedReference* qr)
 {
 	// skip the “type 6” tasks
@@ -3866,17 +3871,22 @@ void __fastcall DoQueuedReferenceHook(QueuedReference* qr)
 
 			// optional “insert objects” (kHookFormFlag6_InsertObject == 0x40|0x80)
 			if (s_insertObjects) {
+
 				if (auto* base2 = refr->GetBaseForm2()) {
+
 					constexpr UInt8 mask = kHookFormFlag6_InsertObject;
 					if ((refr->jipFormFlags6 | base2->jipFormFlags6) & mask) {
-						DoInsertObjects_New(refr, base2, root);
-						if (refr->refID == 20 && refr->mods.m_listHead.next) {
-							auto* next = reinterpret_cast<NiNode*>(
-								refr->mods.m_listHead.next
-								);
-							DoInsertObjects_New(refr, nullptr, next);
-						}
+
+						root->refreshRuntimeNodes(refr->getRuntimeNodes(), base2->getRuntimeNodes());
+
+						// This is for the player, but idk why its here.
+						//if (refr->refID == 20 && refr->mods.m_listHead.next) {
+							//auto* next = reinterpret_cast<NiNode*>(refr->mods.m_listHead.next);
+							//DoInsertObjects_New(refr, nullptr, next);
+						//}
+
 					}
+
 				}
 			}
 
@@ -3893,8 +3903,8 @@ void __fastcall DoQueuedReferenceHook(QueuedReference* qr)
 	//ThreadTasks::SetCurrent(prev);
 
 }
+*/
 
-/*
 __declspec(naked) void __fastcall DoQueuedReferenceHook(QueuedReference *queuedRef)
 {
 	__asm
@@ -3993,7 +4003,7 @@ __declspec(naked) void __fastcall DoQueuedReferenceHook(QueuedReference *queuedR
 		push	esi
 		mov		edx, eax
 		mov		ecx, edi
-		call	DoInsertObjects_Old
+		call	DoInsertObjects_New
 		cmp		dword ptr [edi+0xC], 0x14
 		jnz		doLights
 		mov		eax, [edi+0x694]
@@ -4002,7 +4012,7 @@ __declspec(naked) void __fastcall DoQueuedReferenceHook(QueuedReference *queuedR
 		push	eax
 		xor		edx, edx
 		mov		ecx, edi
-		call	DoInsertObjects_Old
+		call	DoInsertObjects_New
 	doLights:
 		test	byte ptr [esi+0x33], 0x20
 		jz		cellUnlock
@@ -4025,7 +4035,7 @@ __declspec(naked) void __fastcall DoQueuedReferenceHook(QueuedReference *queuedR
 		retn
 	}
 }
-*/
+
 
 __declspec(naked) void LoadBip01SlotHook()
 {

@@ -958,6 +958,8 @@ bool __fastcall GetFileArchived(const char *filePath);
 
 int __stdcall FileExistsEx(char *filePath, bool isFolder);
 
+bool modelPathExists(const char* path);
+
 int GetIsLAA();
 
 extern double s_nvseVersion;

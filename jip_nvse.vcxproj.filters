@@ -91,11 +91,11 @@
     <ClCompile Include="internal\Ni_types.cpp">
       <Filter>internal</Filter>
     </ClCompile>
-    <ClCompile Include="p_plus\hookGlue.cpp">
-      <Filter>pUtilities</Filter>
-    </ClCompile>
     <ClCompile Include="p_plus\NiNode.cpp">
       <Filter>pUtilities\Nif</Filter>
+    </ClCompile>
+    <ClCompile Include="p_plus\NiBlockPath.cpp">
+      <Filter>pUtilities\Models</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -414,7 +414,7 @@
     <ClInclude Include="p_plus\FormModelHandler.hpp">
       <Filter>pUtilities\Models</Filter>
     </ClInclude>
-    <ClInclude Include="p_plus\ModelBuilder.hpp">
+    <ClInclude Include="p_plus\NiBlockPathBuilder.hpp">
       <Filter>pUtilities\Models</Filter>
     </ClInclude>
     <ClInclude Include="p_plus\NiBlockPath.hpp">
@@ -451,6 +451,9 @@
       <Filter>pUtilities\Models</Filter>
     </Natvis>
     <Natvis Include="p_plus\pBitMask.natvis">
+      <Filter>pUtilities</Filter>
+    </Natvis>
+    <Natvis Include="p_plus\VectorSortedView.natvis">
       <Filter>pUtilities</Filter>
     </Natvis>
   </ItemGroup>

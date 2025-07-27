@@ -175,7 +175,111 @@ public:
  		return *reinterpret_cast<void* const*>(this) == reinterpret_cast<void*>(vtblPtr);
 	}
 
+	// 0x40F6E0
+	void incrementRef() {
+		InterlockedIncrement(&m_uiRefCount);
+	}
+
+	// 0x401970
+	void decrementRef() {
+		if (!InterlockedDecrement(&m_uiRefCount)) {
+			Free();
+		}
+	}
+
 };
+
+// basic ref-count primitives
+inline void NiAddRef(NiRefObject* obj) noexcept {
+	if (obj) obj->incrementRef();
+}
+inline void NiRelease(NiRefObject* obj) noexcept {
+	if (obj) obj->decrementRef();
+}
+
+struct adopt_ref_t { explicit adopt_ref_t() = default; };
+inline constexpr adopt_ref_t adopt_ref{};
+
+template<typename T>
+class NiRefPtr {
+
+	static_assert(std::is_base_of_v<NiRefObject, T>, "NiRefPtr<T>: T must derive from NiRefObject");
+
+public:
+
+	T* ptr = nullptr;
+
+	// default/nullptr/raw‐pointer ctors
+	constexpr NiRefPtr() noexcept = default;
+	NiRefPtr(std::nullptr_t) noexcept : ptr(nullptr) {}
+	explicit NiRefPtr(T* p) noexcept : ptr(p) { NiAddRef(ptr); }
+	NiRefPtr(T* p, adopt_ref_t) noexcept : ptr(p) {}
+
+	// converting-copy: U* → T*
+	template<typename U>
+		requires (std::convertible_to<U*, T*> || std::derived_from<T, U>)
+	NiRefPtr(const NiRefPtr<U>& other) noexcept
+		: ptr(static_cast<T*>(other.get()))
+	{
+		NiAddRef(ptr);
+	}
+
+	// converting-move: U* → T*, steal ownership
+	template<typename U>
+		requires (std::convertible_to<U*, T*> || std::derived_from<T, U>)
+	NiRefPtr(NiRefPtr<U>&& other) noexcept
+		: ptr(static_cast<T*>(other.get()))
+	{
+		other.ptr = nullptr;
+	}
+
+	// copy
+	NiRefPtr(const NiRefPtr& o) noexcept : ptr(o.ptr) { NiAddRef(ptr); }
+
+	~NiRefPtr() noexcept { NiRelease(ptr); }
+
+	// nullptr clears without release
+	NiRefPtr& operator=(std::nullptr_t) noexcept { ptr = nullptr; return *this; }
+	// raw pointer assign
+	NiRefPtr& operator=(T* p) noexcept {
+		if (p) NiAddRef(p);
+		if (ptr) NiRelease(ptr);
+		ptr = p;
+		return *this;
+	}
+	// copy-assign
+	NiRefPtr& operator=(const NiRefPtr& o) noexcept { return *this = o.ptr; }
+	// move-assign
+	NiRefPtr& operator=(NiRefPtr&& o) noexcept {
+		if (this != &o) {
+			NiRelease(ptr);
+			ptr = o.ptr;
+			o.ptr = nullptr;
+		}
+		return *this;
+	}
+
+	T* get() const noexcept { return ptr; }
+	T* operator->() const noexcept { return ptr; }
+	T& operator*() const noexcept { return *ptr; }
+	explicit operator bool() const noexcept { return ptr != nullptr; }
+
+	bool operator==(std::nullptr_t) const noexcept { return ptr == nullptr; }
+	bool operator!=(std::nullptr_t) const noexcept { return ptr != nullptr; }
+	friend bool operator==(std::nullptr_t, const NiRefPtr& x) noexcept { return x.ptr == nullptr; }
+	friend bool operator!=(std::nullptr_t, const NiRefPtr& x) noexcept { return x.ptr != nullptr; }
+};
+
+//–– free helpers ––
+template<typename T, typename U>
+NiRefPtr<T> ni_static_cast(const NiRefPtr<U>& src) noexcept {
+	return NiRefPtr<T>(static_cast<T*>(src.get()));
+}
+
+template<typename T, typename U>
+NiRefPtr<T> ni_move_cast(NiRefPtr<U>&& src) noexcept {
+	return NiRefPtr<T>(std::move(src));
+}
 
 class TempNiRefObject
 {
@@ -1644,7 +1748,7 @@ public:
 	void Dump(UInt8 dumpFlags = 0xF);
 	void DumpParents();
 
-	__forceinline bool isNiNode() {
+	__forceinline bool isNiNode() const {
 		return ((*(UInt32**)this)[(0xC >> 2)] == 0x6815C0);
 	}
 
@@ -1696,8 +1800,8 @@ public:
 //------------------------------ Plugins+ ------------------------------
 
 	void AddPointLights();
-	NiAVObject* DeepSearchByName(const NiFixedString& nameStr) const;	//	str of NiString
-	NiAVObject* DeepSearchByName(const char* blockName) const;
+	NiAVObject* DeepSearchByName(const NiFixedString& nameStr);	//	str of NiString
+	NiAVObject* DeepSearchByName(const char* blockName);
 
 	NiAVObject* DeepSearchByPath(const char* blockPath);
 	NiAVObject* DeepSearchByPath(const NiBlockPathView& blockPath);
@@ -1708,7 +1812,25 @@ public:
 	NiAVObject* BuildNiPath(const NiBlockPathView& blockPath, NiBlockPathBuilder& output);
 
 	void DownwardsInitPointLights(NiNode* root);
+	void AddSuffixToAllChildren(const char* suffix);
+	void removeRuntimeNode(const NiRuntimeNode& toRemove);
+	void removeAllRuntimeNodes(const NiRuntimeNodeVector* runtimeNodes);
+	void attachRuntimeNodes(const NiRuntimeNodeVector* runtimeNodes);
+	void attachRuntimeRef(const NiRuntimeNode& toAttach);
+	void attachRuntimeModel(const NiRuntimeNode& toAttach);
+	void attachRuntimeNode(const NiRuntimeNode& toAttach);
 
+	void refreshRuntimeNodes(const NiRuntimeNodeVector* refRuntimeNodes, const NiRuntimeNodeVector* baseFormRuntimeNodes) {
+
+		removeAllRuntimeNodes(refRuntimeNodes);
+		removeAllRuntimeNodes(baseFormRuntimeNodes);
+
+		attachRuntimeNodes(baseFormRuntimeNodes);
+		attachRuntimeNodes(refRuntimeNodes);
+
+	}
+
+	//Model Builder
 	bool hasChildNode(const char* name) const {
 		for (auto child : m_children) {
 			if (child && child->m_blockName.isValid() && strcmp(child->m_blockName.CStr(), name) == 0) {
@@ -1726,8 +1848,6 @@ public:
 		}
 		return false;
 	}
-
-	void AddSuffixToAllChildren(const char* suffix);
 
 	//----------------------------------------------------------------------  
 	// 1) Collect all descendants of type T  

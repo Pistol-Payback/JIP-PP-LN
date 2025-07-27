@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "NiBlockPath.hpp"
+#include "NiBlockPathBuilder.hpp"
 
 struct NiRuntimeNode {
 
@@ -15,10 +15,11 @@ struct NiRuntimeNode {
     NiRuntimeNode& operator=(const NiRuntimeNode&) = default;
     ~NiRuntimeNode() = default;
 
-    NiRuntimeNode(NiBlockPath&& paths, const NiFixedString& leafName, const NiToken value = {})
-        : value(value)
-        , node(leafName)
-        , path(std::move(paths))
+    NiRuntimeNode(NiBlockPathStatic&& paths, const NiFixedString& leafName, const NiToken value = {})
+        : 
+        value(value),
+        node(leafName),
+        path(std::move(paths))
     {}
 
     NiRuntimeNode(const char* fullPath, const char* leafName, const NiToken value = {}) : value(value), node(leafName), path(fullPath) {}
@@ -26,18 +27,19 @@ struct NiRuntimeNode {
     NiToken  value;
 
     // Node, or model root node
-    NiFixedString  node;
-    NiBlockPath    path;  // the sequence of parent‐names
+    NiFixedString       node;
+    NiBlockPathStatic   path;  // the sequence of parent‐names
+    NiRefPtr<NiNode>    runtimeNode; //Can be null
 
     inline bool isValid() const { return node.isValid(); }
 
     //checks a sparse path, path is less exact, but quicker. 
-    bool hasNode(const NiBlockPathView& blockPath, const NiFixedString& nodeName) const noexcept {
+    bool isNode(const NiBlockPathView& blockPath, const NiFixedString& nodeName) const noexcept {
         return node == nodeName && path.containsSparsePath(blockPath);
     }
 
     //checks a sparse path, path is less exact, but quicker. 
-    bool hasNode(const char* pathToMatch, const char* nodeName) const noexcept {
+    bool isNode(const char* pathToMatch, const char* nodeName) const noexcept {
         return strcmp(node.CStr(), nodeName) == 0 && path.containsSparsePath(pathToMatch);
     }
 
@@ -58,6 +60,10 @@ struct NiRuntimeNode {
 
     bool contains(const char* pathToMatch, const char* nodeName) const noexcept {
         return strcmp(node.CStr(), nodeName) == 0 || path.contains(pathToMatch);
+    }
+
+    bool contains(const char* pathToMatch, NiFixedString& nodeName) const noexcept {
+        return node == nodeName || path.contains(pathToMatch);
     }
 
     bool contains(NiRuntimeNode const& other) const noexcept {

@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "RuntimeNodeVector.hpp"
 #include "NiBlockPath.hpp"
-#include "ModelBuilder.hpp"
+#include "NiBlockPathBuilder.hpp"
 #include <unordered_map>
 
 enum AttachHookFlags : uint8_t
@@ -26,50 +26,14 @@ class FormRuntimeModelManager
 
 public:
 
+    NiRuntimeNodeVector& getFirstPersonModelList() {
+        return playerFirstPersonModel;
+    }
+
     static FormRuntimeModelManager& getSingleton() {
         static FormRuntimeModelManager s_nodeManager;
         return s_nodeManager;
     }
-
-    /*
-    [[nodiscard]] bool formatString(std::string_view input, std::string& outPath, std::string& outValue, std::string& outSuffix)
-    {
-        outPath.clear();
-        outValue.clear();
-        outSuffix.clear();
-
-        if (input.empty())
-            return false;
-
-        const auto pipePos = input.find('|');
-        std::string_view remaining;
-
-        if (pipePos != std::string_view::npos) {
-            outPath = input.substr(0, pipePos);      // may be empty
-            remaining = input.substr(pipePos + 1);    // after ‘|’
-            if (remaining.empty())
-                return false;                         // “path|”
-        }
-        else {
-            remaining = input;
-        }
-
-        if (!remaining.empty() && remaining.front() == '*') {
-            const auto secondStar = remaining.find('*', 1);
-            if (secondStar == std::string_view::npos || secondStar == 1)
-                return false;                         // no closing ‘*’ or empty
-            outSuffix = remaining.substr(1, secondStar - 1);
-            remaining = remaining.substr(secondStar + 1); // after suffix
-        }
-
-        // ── 3. Remaining text must be the value ────────────────────
-        if (remaining.empty())
-            return false;
-
-        outValue = remaining;
-        return true;
-    }
-    */
 
     static bool formatString(const char* toFormat, const char*& outPath, const char*& outValue, const char*& outSuffix)
     {
@@ -146,8 +110,8 @@ public:
             return false;
 
         // Check player first-person if needed
-        if (form->IsPlayer() && s_pc1stPersonNode) {
-            if (NiAVObject* path = s_pc1stPersonNode->DeepSearchBySparsePath(pathToFind))
+        if (form->IsPlayer() && g_thePlayer->node1stPerson) {
+            if (g_thePlayer->node1stPerson->DeepSearchBySparsePath(pathToFind))
                return true;
         }
 
@@ -161,12 +125,12 @@ public:
             if (pathList->findNode(pathToFind))
                 return true;
         }
-        return false;
+
         // Fallback: fully built model search
         if (const char* path = form->GetModelPath()) {
             ModelTemp temp = ModelTemp(path);
-            ModelBuilder liveBuilder(temp.clonedNode, getNodesList(form));
-            if (NiNode* liveRoot = liveBuilder.model) {
+            temp.clonedNode->attachRuntimeNodes(getNodesList(form));
+            if (NiNode* liveRoot = temp.clonedNode) {
                 if (liveRoot->DeepSearchBySparsePath(pathToFind)) {
                     return true;
                 }
@@ -183,7 +147,7 @@ public:
 
         // Check player first-person if needed
         if (form->IsPlayer()) {
-            if (s_pc1stPersonNode->DeepSearchBySparsePath(NiBlockPathBase(fullPath)))
+            if (g_thePlayer->node1stPerson->DeepSearchBySparsePath(NiBlockPathBase(fullPath)))
                 return true;
         }
 
@@ -203,16 +167,15 @@ public:
             if (pathList->findNode(prefix, nodeHead))
                 return true;
         }
-        return false;
+
         // Fallback: fully built model search
         if (const char* path = form->GetModelPath()) {
             ModelTemp temp = ModelTemp(path);
-            ModelBuilder liveBuilder(temp.clonedNode, getNodesList(form));
-            if (NiNode* liveRoot = liveBuilder.model) {
+            temp.clonedNode->attachRuntimeNodes(getNodesList(form));
+            if (NiNode* liveRoot = temp.clonedNode) {
                 if (liveRoot->DeepSearchBySparsePath(NiBlockPathBase(fullPath))) {
                     return true;
                 }
-
             }
         }
 
@@ -223,7 +186,7 @@ public:
     /// If this is the first path for the form, set its JIP flag on.
     bool RegisterNode(TESForm* form, const char* formattedNode, NiNode* root) {
 
-        bool destroy = false;
+        bool successful = false;
 
         if (!form) return false;
         NiRuntimeNodeVector* pathList = getNodesList(form);
@@ -233,19 +196,25 @@ public:
         const char* outSuffix = nullptr;
         formatString(formattedNode, outPath, outNodeName, outSuffix);
 
-        if (pathList && pathList->findNode(outPath, outNodeName)) {
-            return false; //Already attached
+        if (pathList) {
+            // skip a leading '^' if present
+            const char* name = outNodeName + (outNodeName[0] == '^');
+            if (pathList->findNode(outPath, name)) {
+                return false;  // Already attached
+            }
         }
 
-        //Attach to first person
+        NiBlockPathBase blockPath(outPath);
+        // First-person hook (Player only)
         if (form->IsPlayer()) {
-            ModelBuilder fpBuilder(s_pc1stPersonNode, getNodesList(form));
-            NiRuntimeNode fullPath = fpBuilder.attachNewNode(outPath, outNodeName);
-            if (!fullPath.isValid()) {
-                return false;
+
+            successful = playerFirstPersonModel.attachNode(g_thePlayer->node1stPerson, blockPath, outNodeName);
+            form->SetJIPFlag(kAttachHookFlags_AttachModel, true);
+
+            if (g_thePlayer->node1stPerson == root) {
+                Console_Print("root node was 1st person node");
             }
-            playerFirstPersonModel.addExact(std::move(fullPath));
-            form->SetJIPFlag(kAttachHookFlags_InsertNode, true);
+
         }
 
         //Build model
@@ -253,72 +222,70 @@ public:
         if (!root) {
             const char* _modelPath = form->GetModelPath();
             if (!_modelPath) {
-                return false;
+                return successful;
             }
 
             if (temp.load(_modelPath)) { //Load a temp that will get freed at the end of this scope
                 root = temp.clonedNode;
+                root->attachRuntimeNodes(getNodesList(form));
             }
 
-        }
-        ModelBuilder model(root, getNodesList(form));
-        NiRuntimeNode fullPath = model.attachNewNode(outPath, outNodeName);
-
-        if (!fullPath.isValid()) {
-            return false;
         }
 
         if (!pathList) {
             // first-ever node for this form
-            nodeTree.try_emplace(form, std::move(fullPath));
+            NiRuntimeNodeVector formRuntimeNodes;
+            if (!formRuntimeNodes.attachNode(root, blockPath, outNodeName)) {
+                return successful;
+            }
+            auto result = nodeTree.try_emplace(form, std::move(formRuntimeNodes));
             form->SetJIPFlag(kAttachHookFlags_InsertNode, true);
-            return true;
         }
         else {
-            bool added = pathList->addExact(std::move(fullPath));
-            if (added) {
-                form->SetJIPFlag(kAttachHookFlags_InsertNode, true);
+
+            if (!pathList->attachNode(root, blockPath, outNodeName)) {
+                return successful;
             }
-            return added;
+            form->SetJIPFlag(kAttachHookFlags_InsertNode, true);
         }
+
+        return true;
 
     }
 
     bool RegisterModel(TESForm* form, const char* formattedNode, NiNode* root) {
 
-        bool added = false;
         if (!form) return false;
         NiRuntimeNodeVector* pathList = getNodesList(form);
 
         const char* outPath = nullptr;
-        const char* outNodeName = nullptr;
+        const char* modelPath = nullptr;
         const char* outSuffix = nullptr;
-        formatString(formattedNode, outPath, outNodeName, outSuffix);
+        formatString(formattedNode, outPath, modelPath, outSuffix);
 
-        // Already attached?  Nothing to do.
-        if (pathList && pathList->findNode(outPath, outNodeName)) {
+        if (!modelPath || !modelPathExists(modelPath)) {
             return false;
         }
 
-        // First-person hook (Player only)
+        // Already attached?  Nothing to do.
+        if (pathList && pathList->findNode(outPath, modelPath)) {
+            return false;
+        }
+
+        NiBlockPathBase blockPath(outPath);
+
+        // First-person (Player only)
         if (form->IsPlayer()) {
-            ModelBuilder fpBuilder(s_pc1stPersonNode, getNodesList(form));
 
-            NiRuntimeNode fullPath = fpBuilder.attachNewModel(outPath, outNodeName, outSuffix);
-
-            if (!fullPath.isValid()) {
-                return false;
-            }
-            playerFirstPersonModel.addExact(std::move(fullPath));
+            playerFirstPersonModel.addModel(g_thePlayer->node1stPerson, blockPath, modelPath, outSuffix);
             form->SetJIPFlag(kAttachHookFlags_AttachModel, true);
-
-            added = pathList->addExact(std::move(fullPath));
 
         }
 
         //Build model
         ModelTemp temp;
         if (!root) {
+
             const char* _modelPath = form->GetModelPath();
             if (!_modelPath) {
                 return false;
@@ -326,53 +293,134 @@ public:
 
             if (temp.load(_modelPath)) { //Load a temp that will get freed at the end of this scope
                 root = temp.clonedNode;
+                root->attachRuntimeNodes(getNodesList(form));
             }
 
-        }
-
-        ModelBuilder builder(root, getNodesList(form));
-        NiRuntimeNode fullPath = builder.attachNewModel(outPath, outNodeName, outSuffix);
-
-        if (!fullPath.isValid()) {
-            return false;
         }
 
         if (!pathList) {
-            nodeTree.try_emplace(form, std::move(fullPath));
-            form->SetJIPFlag(kAttachHookFlags_AttachModel, true);
-            return true;
-        }
-        else if (!added) {
-            added = pathList->addExact(std::move(fullPath));
-            if (added) {
-                form->SetJIPFlag(kAttachHookFlags_AttachModel, true);
+
+            NiRuntimeNodeVector formRuntimeNodes;
+            if (!formRuntimeNodes.addModel(root, blockPath, modelPath, outSuffix)) {
+                return false;
             }
-            return added;
+            auto result = nodeTree.try_emplace(form, std::move(formRuntimeNodes));
+
         }
+        else {
+
+            if (!pathList->addModel(root, blockPath, modelPath, outSuffix)) {
+                return false;
+            }
+
+        }
+
+        form->SetJIPFlag(kAttachHookFlags_AttachModel, true);
+        return true;
+
     }
 
     /// Remove one matching node‐path for `form`.
     /// If that was the last entry, clear its JIP flag.
-    bool RemoveNode(TESForm* form, const char* formattedNode, uint8_t jipFlag) {
+    bool RemoveNode(TESForm* form, const char* formattedNode, uint8_t jipFlag, NiNode* root) {
 
         if (!form) return false;
         NiRuntimeNodeVector* pathList = getNodesList(form);
 
         if (!pathList) return false;
 
-        const char* outPath = nullptr;
-        const char* outValue = nullptr;
+        const char* outPath = nullptr; //If they put a pipe
+        const char* nodeName = nullptr; //Node name or model path
         const char* outSuffix = nullptr;
-        formatString(formattedNode, outPath, outValue, outSuffix);
+        formatString(formattedNode, outPath, nodeName, outSuffix);
+
+        NiBlockPathBase blockPath = NiBlockPathBase(outPath, nodeName);
 
         //Remove from first person
         if (form->IsPlayer()) {
-            if (!playerFirstPersonModel.remove(outPath, outValue))
-                return false;   //Didn't find node
+
+            std::vector<NiRuntimeNode> toRemoveList = playerFirstPersonModel.moveAllContainingPaths(blockPath);
+            if (toRemoveList.empty()) {
+                return false;   //Didn't find a node
+            }
+
+            for (auto& node : toRemoveList) {
+                g_thePlayer->node1stPerson->removeRuntimeNode(node);
+            }
+
         }
 
-        if (!pathList->remove(outPath, outValue))
-            return false;   //Didn't find node
+        std::vector<NiRuntimeNode> toRemoveList = pathList->moveAllContainingPaths(blockPath);
+        if (toRemoveList.empty()) {
+            return false;   //Didn't find a node
+        }
+
+        if (root) {
+            for (auto& node : toRemoveList) {
+                root->removeRuntimeNode(node);
+            }
+        }
+
+        if (pathList->empty())
+            form->SetJIPFlag(jipFlag, false);
+
+        return true;
+    }
+
+    bool RemoveModel(TESForm* form, const char* formattedNode, uint8_t jipFlag, NiNode* root) {
+
+        if (!form) return false;
+        NiRuntimeNodeVector* pathList = getNodesList(form);
+
+        if (!pathList) return false;
+
+        const char* attachToNode = nullptr;
+        const char* modelPath = nullptr; //Node name or model path
+        const char* outSuffix = nullptr;
+        formatString(formattedNode, attachToNode, modelPath, outSuffix);
+
+        if (!modelPath || !modelPathExists(modelPath)) {
+            return false;
+        }
+
+        //Rework this, we only need to extract the root node, no need to copy the whole tree
+        ModelTemp tempModel = ModelTemp(modelPath);
+
+        NiFixedString fullBlockName;
+        if (outSuffix) {
+            fullBlockName = NiFixedString((tempModel.clonedNode->m_blockName.ToString() + std::string(outSuffix)).c_str());
+        }
+        else {
+            fullBlockName = tempModel.clonedNode->m_blockName;
+        }
+
+
+        NiBlockPathBase blockPath = NiBlockPathBase(attachToNode, fullBlockName);
+
+        //Remove from first person
+        if (form->IsPlayer()) {
+
+            std::vector<NiRuntimeNode> toRemoveList = playerFirstPersonModel.moveAllContainingPaths(blockPath);
+            if (toRemoveList.empty()) {
+                return false;   //Didn't find a node
+            }
+
+           for (auto& node : toRemoveList) {
+               g_thePlayer->node1stPerson->removeRuntimeNode(node);
+           }
+
+        }
+
+        std::vector<NiRuntimeNode> toRemoveList = pathList->moveAllContainingPaths(blockPath);
+        if (toRemoveList.empty()) {
+            return false;   //Didn't find a node
+        }
+
+        if (root) {
+            for (auto& node : toRemoveList) {
+                root->removeRuntimeNode(node);
+            }
+        }
 
         if (pathList->empty())
             form->SetJIPFlag(jipFlag, false);

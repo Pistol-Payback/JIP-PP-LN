@@ -1582,6 +1582,15 @@ __declspec(naked) int __stdcall FileExistsEx(char *filePath, bool isFolder)
 	}
 }
 
+bool modelPathExists(const char* path) {
+	static char meshesPath[0x100] = "data\\meshes\\";
+	StrCopy(meshesPath + 12, path);
+	if (!FileExistsEx(meshesPath, false)) {
+		return false;
+	}
+	return true;
+}
+
 int GetIsLAA()
 {
 	static int isLAA = -1;

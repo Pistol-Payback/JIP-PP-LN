@@ -6,7 +6,7 @@ struct NiToken;
 struct NiBlockPathBuilder;
 
 struct NiBlockPathView;
-struct NiBlockPath;
+struct NiBlockPathStatic;
 struct NiBlockPathBase;
 
 struct NiRuntimeNode;

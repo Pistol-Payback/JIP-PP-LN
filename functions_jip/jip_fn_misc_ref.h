@@ -1149,7 +1149,7 @@ bool Cmd_GetNifBlockScale_Execute(COMMAND_ARGS)
 	char blockName[0x40];
 	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &playerNode))
-		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
+		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 			*result = niBlock->m_transformLocal.scale;
 	return true;
 }
@@ -1160,7 +1160,7 @@ bool Cmd_SetNifBlockScale_Execute(COMMAND_ARGS)
 	float newScale;
 	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &newScale, &playerNode) && blockName[0])
-		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
+		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			niBlock->m_transformLocal.scale = newScale;
 			if (IS_NODE(niBlock) && NOT_ACTOR(thisObj))
@@ -1176,7 +1176,7 @@ bool Cmd_GetNifBlockFlag_Execute(COMMAND_ARGS)
 	UInt32 flagID = 0;
 	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &flagID, &playerNode) && (flagID <= 31))
-		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName); niBlock && (niBlock->m_flags & (1 << flagID)))
+		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName); niBlock && (niBlock->m_flags & (1 << flagID)))
 			*result = 1;
 	return true;
 }
@@ -1187,7 +1187,7 @@ bool Cmd_SetNifBlockFlag_Execute(COMMAND_ARGS)
 	UInt32 flagID, doSet = 0;
 	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &flagID, &doSet, &playerNode) && (flagID <= 26))
-		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
+		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
 			if (doSet) niBlock->m_flags |= (1 << flagID);
 			else niBlock->m_flags &= ~(1 << flagID);
@@ -1470,9 +1470,9 @@ bool Cmd_RemoveLight_Execute(COMMAND_ARGS)
 		if (NiNode *objNode = thisObj->GetNode2(nodeName))
 		{
 			NiPointLight *pointLight;
-			for (auto iter = objNode->m_children.Begin(); iter; ++iter)
+			for (auto& child : objNode->m_children)
 			{
-				if (!(pointLight = (NiPointLight*)*iter) || NOT_TYPE(pointLight, NiPointLight) || !(pointLight->extraFlags & 0x80))
+				if (!(pointLight = (NiPointLight*)child) || NOT_TYPE(pointLight, NiPointLight) || !(pointLight->extraFlags & 0x80))
 					continue;
 				objNode->RemoveObject(pointLight);
 				break;
@@ -1545,14 +1545,14 @@ bool __fastcall RegisterInsertObject_New(InsertObjectParams& inData) {
 		if (attach)
 			return FormRuntimeModelManager::getSingleton().RegisterNode(targetForm, path, rootNode);
 		else
-			return FormRuntimeModelManager::getSingleton().RemoveNode(targetForm, path, hook);
+			return FormRuntimeModelManager::getSingleton().RemoveNode(targetForm, path, hook, rootNode);
 		break;
 
 	case kHookFormFlag6_AttachModel:
 		if (attach)
 			return FormRuntimeModelManager::getSingleton().RegisterModel(targetForm, path, rootNode);
 		else
-			return FormRuntimeModelManager::getSingleton().RemoveNode(targetForm, path, hook);
+			return FormRuntimeModelManager::getSingleton().RemoveModel(targetForm, path, hook, rootNode);
 		break;
 
 	default:
@@ -1562,7 +1562,6 @@ bool __fastcall RegisterInsertObject_New(InsertObjectParams& inData) {
 	return true;
 }
 
-/*
 bool __fastcall RegisterInsertObject_Old(char *inData)
 {
 	static char meshesPath[0x100] = "data\\meshes\\";
@@ -1678,7 +1677,7 @@ bool __fastcall RegisterInsertObject_Old(char *inData)
 	s_insertObjects = !s_insertNodeMap->Empty() || !s_attachModelMap->Empty();
 	return true;
 }
-*/
+
 
 //Version 57.41
 bool Cmd_InsertNode_Execute(COMMAND_ARGS)
@@ -1770,23 +1769,22 @@ bool Cmd_SynchronizePosition_Execute(COMMAND_ARGS)
 bool Cmd_ModelHasBlock_Execute(COMMAND_ARGS)
 {
 	char buffer[0x80];
-	buffer[0] = '^';
 	TESForm* form;
-	if (ExtractFormatStringArgs(1, buffer + 1, EXTRACT_ARGS_EX, kCommandInfo_ModelHasBlock.numParams, &form))
+	if (ExtractFormatStringArgs(1, buffer, EXTRACT_ARGS_EX, kCommandInfo_ModelHasBlock.numParams, &form))
 	{
 		TESObjectREFR* refr = IS_REFERENCE(form) ? (TESObjectREFR*)form : nullptr;
 		NiNode* rootNode = refr ? refr->GetNiNode() : nullptr;
 
 		if (rootNode) {
 
-			bool foundNode = rootNode->DeepSearchBySparsePath(NiBlockPathBase(buffer + 1)) != nullptr;
+			bool foundNode = rootNode->DeepSearchBySparsePath(NiBlockPathBase(buffer)) != nullptr;
 
 			if (foundNode) {
 				*result = foundNode;
 				return true;
 			}
 			else if (form->IsPlayer()) {
-				if (s_pc1stPersonNode->DeepSearchBySparsePath(NiBlockPathBase(buffer + 1))) {
+				if (g_thePlayer->node1stPerson->DeepSearchBySparsePath(NiBlockPathBase(buffer))) {
 					foundNode = true;
 				}
 				return true;	//Return early, because the player model is always loaded
@@ -1795,10 +1793,10 @@ bool Cmd_ModelHasBlock_Execute(COMMAND_ARGS)
 		}
 
 		if (refr) {
-			*result = FormRuntimeModelManager::getSingleton().HasNode(refr->baseForm, buffer + 1);
+			*result = FormRuntimeModelManager::getSingleton().HasNode(refr->baseForm, buffer);
 		}
 		else {
-			*result = FormRuntimeModelManager::getSingleton().HasNode(form, buffer + 1);
+			*result = FormRuntimeModelManager::getSingleton().HasNode(form, buffer);
 		}
 
 	}
@@ -1835,9 +1833,9 @@ void GetCollisionNodes(NiNode *node, TempElements *tmpElements)
 {
 	if (node->m_collisionObject && node->m_collisionObject->worldObj)
 		tmpElements->Append(node->GetName());
-	for (auto iter = node->m_children.Begin(); iter; ++iter)
-		if (*iter && IS_NODE(*iter))
-			GetCollisionNodes((NiNode*)*iter, tmpElements);
+	for (auto node : node->m_children)
+		if (node && IS_NODE(node))
+			GetCollisionNodes((NiNode*)node, tmpElements);
 }
 
 bool Cmd_GetCollisionNodes_Execute(COMMAND_ARGS)
@@ -1855,11 +1853,11 @@ bool Cmd_GetCollisionNodes_Execute(COMMAND_ARGS)
 void GetChildBlocks(NiNode *node, TempElements *tmpElements)
 {
 	tmpElements->Append(node->GetName());
-	for (auto iter = node->m_children.Begin(); iter; ++iter)
-		if (*iter)
-			if IS_NODE(*iter)
-				GetChildBlocks((NiNode*)*iter, tmpElements);
-			else tmpElements->Append(iter->GetName());
+	for (auto node : node->m_children)
+		if (node)
+			if IS_NODE(node)
+				GetChildBlocks((NiNode*)node, tmpElements);
+			else tmpElements->Append(node->GetName());
 }
 
 bool Cmd_GetChildBlocks_Execute(COMMAND_ARGS)

@@ -323,6 +323,10 @@ public:
 	{
 		return CdeclCall<TESForm*>(0x465110, eType);
 	}
+
+	NiRuntimeNodeVector* getRuntimeNodes();
+	NiRuntimeNodeVector* getFirstPersonRuntimeNodes();
+
 };
 static_assert(sizeof(TESForm) == 0x18);
 

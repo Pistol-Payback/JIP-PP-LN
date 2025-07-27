@@ -411,6 +411,8 @@ __declspec(naked) NiNode* __stdcall NiNode::Create(const char *nameStr)	//	str o
 NiNode* NiNode::pCreate(const char* nameStr)
 {
 	NiNode* node = StdCall<NiNode*>(0xA5F030);
+	//NiRefPtr<NiNode> node(raw, adopt_ref);
+
 	if (nameStr) {
 		node->m_blockName = NiFixedString(nameStr);
 	}
@@ -420,6 +422,8 @@ NiNode* NiNode::pCreate(const char* nameStr)
 NiNode* NiNode::pCreate(const NiFixedString& nameStr)
 {
 	NiNode* node = StdCall<NiNode*>(0xA5F030);
+	//NiRefPtr<NiNode> node(raw, adopt_ref);
+
 	if (nameStr) {
 		node->m_blockName = nameStr;
 	}
@@ -1153,16 +1157,16 @@ void NiNode::GetContactObjects(ContactObjects &contactObjs)
 			for (auto iter = ((hkpSimpleShapePhantom*)hWorldObj)->cdBodies.Begin(); iter; ++iter)
 				contactObjs.Append(iter->GetWorldObj());
 	}
-	for (auto iter = m_children.Begin(); iter; ++iter)
-		if (*iter && IS_NODE(*iter)) ((NiNode*)*iter)->GetContactObjects(contactObjs);
+	for (auto& node : m_children)
+		if (node && IS_NODE(node)) ((NiNode*)node)->GetContactObjects(contactObjs);
 }
 
 bool NiNode::HasPhantom()
 {
 	if (m_collisionObject && m_collisionObject->worldObj && (((hkpWorldObject*)m_collisionObject->worldObj->refObject)->collisionType == 2))
 		return true;
-	for (auto iter = m_children.Begin(); iter; ++iter)
-		if (*iter && IS_NODE(*iter) && ((NiNode*)*iter)->HasPhantom())
+	for (auto& node : m_children)
+		if (node && IS_NODE(node) && ((NiNode*)node)->HasPhantom())
 			return true;
 	return false;
 }

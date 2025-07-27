@@ -36,6 +36,7 @@ __declspec(naked) void InvalidChargenQuestFixHook()
 	}
 }
 
+//This might cause bugs
 __declspec(naked) void GeneratePlayerNodeHook()
 {
 	__asm

@@ -127,7 +127,9 @@ public:
         pointer* ins = std::upper_bound(view_, view_ + size_, pNew, cmp_ptr);
 
         // shift existing pointers up to make room
-        std::memmove(ins + 1, ins, (view_ + size_ - ins) * sizeof(pointer));
+        //std::memmove(ins + 1, ins, (view_ + size_ - ins) * sizeof(pointer));
+        std::move_backward(ins, view_ + size_, view_ + size_ + 1);
+
         *ins = pNew;
 
         ++size_;
@@ -225,8 +227,8 @@ public:
     // Raw insertion-order iteration
     T* storage_begin()       noexcept { return storage_; }
     T* storage_end()         noexcept { return storage_ + size_; }
-    T* const storage_begin() const noexcept { return storage_; }
-    T* const storage_end()   const noexcept { return storage_ + size_; }
+    T* storage_begin() const noexcept { return storage_; }
+    T* storage_end()   const noexcept { return storage_ + size_; }
 
     // Re-sort view
     void resort() {
@@ -248,8 +250,8 @@ public:
     const Compare& comparator() const { return comp_; }
 
     // Direct access
-    T& operator[](size_type i) { return view_[i]; }
-    const T& operator[](size_type i) const { return view_[i]; }
+    T& operator[](size_type i) { return *view_[i]; }
+    const T& operator[](size_type i) const { return *view_[i]; }
 
 
     std::span<T*>        getView()    noexcept { return { view_, size_ }; }

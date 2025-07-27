@@ -182,7 +182,7 @@
     <ClCompile Include="nvse\GameTiles.cpp" />
     <ClCompile Include="nvse\GameTypes.cpp" />
     <ClCompile Include="nvse\GameUI.cpp" />
-    <ClCompile Include="p_plus\hookGlue.cpp" />
+    <ClCompile Include="p_plus\NiBlockPath.cpp" />
     <ClCompile Include="p_plus\NiNode.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -289,7 +289,7 @@
     <ClInclude Include="nvse\ParamInfos.h" />
     <ClInclude Include="nvse\PluginAPI.h" />
     <ClInclude Include="p_plus\FormModelHandler.hpp" />
-    <ClInclude Include="p_plus\ModelBuilder.hpp" />
+    <ClInclude Include="p_plus\NiBlockPathBuilder.hpp" />
     <ClInclude Include="p_plus\NiBlockPath.hpp" />
     <ClInclude Include="p_plus\NiFixedString.hpp" />
     <ClInclude Include="p_plus\NiRuntimeNode.hpp" />
@@ -310,6 +310,7 @@
     <Natvis Include="p_plus\NiBlockPath.natvis" />
     <Natvis Include="p_plus\NiFixedString.natvis" />
     <Natvis Include="p_plus\pBitMask.natvis" />
+    <Natvis Include="p_plus\VectorSortedView.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
