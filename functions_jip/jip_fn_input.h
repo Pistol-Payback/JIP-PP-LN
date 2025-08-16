@@ -9,6 +9,8 @@ DEFINE_COMMAND_PLUGIN(ReleaseControl, 0, kParams_OneInt);
 DEFINE_COMMAND_PLUGIN(ToggleVanityWheel, 0, kParams_OneOptionalInt);
 DEFINE_COMMAND_PLUGIN(ToggleMouseMovement, 0, kParams_OneOptionalInt);
 DEFINE_COMMAND_PLUGIN(ScrollMouseWheel, 0, kParams_OneOptionalInt);
+DEFINE_COMMAND_PLUGIN(GetControlCodeByID, 0, kParams_OneInt_OneOptionalInt);
+
 
 bool SetOnKeyEventHandler_Execute(COMMAND_ARGS)
 {
@@ -114,5 +116,67 @@ bool Cmd_ScrollMouseWheel_Execute(COMMAND_ARGS)
 	SInt32 value;
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &value))
 		g_inputGlobals->currMouseWheelScroll += value;
+	return true;
+}
+
+//57.47
+enum class ControlType : UInt32 {
+	kKeyboard = 0,
+	kMouse,
+	kController,
+	kJoystick,
+	kCount     // always last: number of valid types
+};
+
+constexpr UInt32 kMaxControlIndex = 27;             // controls are 0..26
+constexpr UInt32 kInvalidControlBind = UINT32_MAX;    // sentinel for “no bind”  
+
+UInt32 GetControlBinding(UInt32 controlIndex, ControlType ctlType)
+{
+	if (controlIndex >= kMaxControlIndex) {
+		return kInvalidControlBind;
+	}
+
+	auto* globs = g_inputGlobals;
+	switch (ctlType) {
+	case ControlType::kKeyboard: {
+		return globs->keyBinds[controlIndex];
+	}
+	case ControlType::kMouse: {
+		UInt32 bind = globs->mouseBinds[controlIndex];
+		return (bind != 0xFF) ? (bind + 0x100) : kInvalidControlBind;
+	}
+	case ControlType::kController: {
+		UInt32 bind = globs->controllerBinds[controlIndex];
+		return (bind != 0xFF) ? ConvertCtrlCodeToMask(bind) : kInvalidControlBind;
+	}
+	case ControlType::kJoystick: {
+		UInt32 bind = globs->joystickBinds[controlIndex];
+		return (bind != 0xFF) ? bind : kInvalidControlBind;
+	}
+	default:
+		return kInvalidControlBind;
+	}
+}
+
+bool Cmd_GetControlCodeByID_Execute(COMMAND_ARGS)
+{
+	UInt32 controlIndex = 0;
+	UInt32 typeValue = 0;
+	*result = -1;  // default “error”
+
+	if (!ExtractArgs(EXTRACT_ARGS, &controlIndex, &typeValue)) {
+		return true;
+	}
+
+	ControlType ctlType = (typeValue < static_cast<UInt32>(ControlType::kCount))
+		? static_cast<ControlType>(typeValue)
+		: ControlType::kCount;  // will yield invalid
+
+	UInt32 rawBind = GetControlBinding(controlIndex, ctlType);
+	*result = (rawBind == kInvalidControlBind)
+		? -1
+		: static_cast<SInt32>(rawBind);
+
 	return true;
 }

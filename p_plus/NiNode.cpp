@@ -3,6 +3,7 @@
 #include "p_plus/FormModelHandler.hpp"
 
 TempObject<NiFixedString> s_LIGH_EDID;
+FormRuntimeModelManager FormRuntimeModelManager::s_nodeManager;
 
 NiRuntimeNodeVector* TESForm::getRuntimeNodes()
 {
@@ -74,6 +75,7 @@ void NiNode::removeRuntimeNode(const NiRuntimeNode& toRemove) {
 			parent->UpdateTransformAndBounds(kNiUpdateData);
 		}
 
+
 	}
 }
 
@@ -143,11 +145,21 @@ void NiNode::attachRuntimeModel(const NiRuntimeNode& toAttach) {
 	}
 
 	NiNode* node = (NiNode*)DeepSearchByPath(toAttach.path);
+
+	if (node->m_blockName != toAttach.path.back()) { //Didin't find full path
+		node = (NiNode*)DeepSearchBySparsePath(NiBlockPathView{ &toAttach.path.back(), 1 });
+	}
+
 	if (!node || !node->isNiNode()) {
 		return;
 	}
 
 	ModelTemp tempModel = ModelTemp(modelPath.path.getPtr());
+
+	if (!tempModel.clonedNode) {
+		return; //Model failed to load
+	}
+
 	if (!node->hasChildNode(tempModel.clonedNode->m_blockName)) {
 
 		NiNode* toAttach = tempModel.detachNode();
@@ -167,6 +179,9 @@ void NiNode::attachRuntimeModel(const NiRuntimeNode& toAttach) {
 void NiNode::attachRuntimeNode(const NiRuntimeNode& toAttach) {
 
 	NiNode* node = (NiNode*)DeepSearchByPath(toAttach.path);
+	if (node->m_blockName != toAttach.path.back()) { //Didin't find full path
+		node = (NiNode*)DeepSearchBySparsePath(NiBlockPathView{ &toAttach.path.back(), 1 });
+	}
 
 	if (!node || !node->isNiNode() || node->hasChildNode(toAttach.node)) {
 		return;
@@ -176,7 +191,7 @@ void NiNode::attachRuntimeNode(const NiRuntimeNode& toAttach) {
 
 		NiNode* grandparent = node;
 		const NiFixedString* child = &toAttach.value.getLink().childObj;
-		node = (NiNode*)grandparent->DeepSearchByPath(NiBlockPathView(child, 1));
+		node = (NiNode*)grandparent->DeepSearchBySparsePath(NiBlockPathView(child, 1));
 
 		if (!node) {
 			return;
@@ -184,8 +199,8 @@ void NiNode::attachRuntimeNode(const NiRuntimeNode& toAttach) {
 
 		NiNode* newParent = NiNode::pCreate(toAttach.node);
 		newParent->AddObject(node, true);
-
 		grandparent->AddObject(newParent, true);
+		//newParent->UpdateTransformAndBounds(kNiUpdateData);
 		grandparent->UpdateTransformAndBounds(kNiUpdateData);
 
 		newParent->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
@@ -200,10 +215,6 @@ void NiNode::attachRuntimeNode(const NiRuntimeNode& toAttach) {
 		newNode->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
 
 	}
-
-
-
-
 
 }
 
@@ -494,7 +505,7 @@ NiAVObject* NiNode::DeepSearchByPath(const char* blockPath)
 	return DeepSearchByPathIter(path, startIdx);
 }
 
-// public overload – takes a pre-split path
+// public overload – takes a pre-split path, if this fails, it will return the deepest path it found.
 NiAVObject* NiNode::DeepSearchByPath(const NiBlockPathView& blockPath)
 {
 	if (blockPath.size() == 0)
@@ -522,6 +533,8 @@ NiAVObject* NiNode::DeepSearchByPathIter(const NiBlockPathView& blockPath, uint3
 	stack.reserve(blockPath.size());
 	stack.push_back({ this, startIdx, 0 });
 
+	NiAVObject* bestMatch = (startIdx > 0) ? this : nullptr;
+
 	while (!stack.empty()) {
 		Frame& frame = stack.back();
 		const NiNode* cur = frame.node;
@@ -535,6 +548,9 @@ NiAVObject* NiNode::DeepSearchByPathIter(const NiBlockPathView& blockPath, uint3
 
 			// match this segment?
 			if (child->m_blockName == blockPath[idx]) {
+
+				// record it as our new deepest
+				bestMatch = child;
 
 				if (idx + 1 == blockPath.size())
 					return child;
@@ -550,7 +566,7 @@ NiAVObject* NiNode::DeepSearchByPathIter(const NiBlockPathView& blockPath, uint3
 		}
 	}
 
-	return nullptr;
+	return bestMatch;
 }
 
 NiAVObject* NiNode::DeepSearchByName(const char* blockName)

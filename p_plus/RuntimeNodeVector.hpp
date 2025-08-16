@@ -153,7 +153,13 @@ struct NiRuntimeNodeVector {
         if (!node || !node->isNiNode()) {
             return false;
         }
+
         ModelTemp tempModel = ModelTemp(modelPath);
+
+        if (!tempModel.clonedNode) {
+            return false; //Model failed to load
+        }
+
         if (!node->hasChildNode(tempModel.clonedNode->m_blockName)) {
 
             NiNode* toAttach = tempModel.detachNode();
@@ -165,8 +171,10 @@ struct NiRuntimeNodeVector {
             node->AddObject(toAttach, true);
 
             return addExact(
-                NiRuntimeNode(builderPath.toStaticPath(), toAttach->m_blockName, NiToken(modelPath, suffix))
+                NiRuntimeNode(builderPath.toStaticPath(NiBlockPathBase{ attachPath, parent->m_blockName }), toAttach->m_blockName, NiToken(modelPath, suffix))
             );
+
+            //node->UpdateTransformAndBounds(kNiUpdateData);
 
         }
 
@@ -175,7 +183,7 @@ struct NiRuntimeNodeVector {
     }
 
     //Dont call on root
-    bool insertParentNode(NiBlockPathBuilder& builderPath, NiNode* node, const char* nodeName) {
+    bool insertParentNode(NiBlockPathBase& original, NiBlockPathBuilder& builderPath, NiNode* node, const char* nodeName) {
 
         NiFixedString name(nodeName + 1); //Skip the ^ parent syntax
 
@@ -187,7 +195,7 @@ struct NiRuntimeNodeVector {
 
         // snapshot the parent‑path prefix
         builderPath.pop();
-        NiBlockPathStatic parentPath = builderPath.toStaticPath();
+        NiBlockPathStatic parentPath = builderPath.toStaticPath(original);
 
         // Splice into the scene graph
         NiNode* grandparent = node->m_parent;
@@ -197,7 +205,7 @@ struct NiRuntimeNodeVector {
         grandparent->AddObject(newParent, true);
         newParent->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
 
-        newParent->UpdateTransformAndBounds(kNiUpdateData);
+        grandparent->UpdateTransformAndBounds(kNiUpdateData);
 
         // Register the new parent in allPaths
         return addExact(NiRuntimeNode(std::move(parentPath), newParent->m_blockName, NiToken(IndexLinkedList(node->m_blockName))));
@@ -205,7 +213,7 @@ struct NiRuntimeNodeVector {
 
     /// Inserts a new child under `node` in the graph
     /// and registers it in the runtime‑vector.
-    bool insertChildNode(NiBlockPathBuilder& builderPath, NiNode* parent, const char* nodeName) {
+    bool insertChildNode(NiBlockPathBase& original, NiBlockPathBuilder& builderPath, NiNode* parent, const char* nodeName) {
 
         NiFixedString name(nodeName);
         if (!parent || !parent->isNiNode() || parent->hasChildNode(name))
@@ -218,7 +226,7 @@ struct NiRuntimeNodeVector {
         parent->UpdateTransformAndBounds(kNiUpdateData);
         child->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
 
-        return addExact(NiRuntimeNode(builderPath.toStaticPath(), child->m_blockName));
+        return addExact(NiRuntimeNode(builderPath.toStaticPath(NiBlockPathBase{ original, parent->m_blockName }), child->m_blockName));
     }
 
     bool attachNode(NiNode* parent, NiBlockPathBase& attachPath, const char* nodeName) {
@@ -232,11 +240,11 @@ struct NiRuntimeNodeVector {
 
         if (nodeName[0] == '^') {
             if (node == parent) return false;
-            return insertParentNode(builderPath, node, nodeName);
+            return insertParentNode(attachPath, builderPath, node, nodeName);
 
         }
         else {
-            return insertChildNode(builderPath, node, nodeName);
+            return insertChildNode(attachPath, builderPath, node, nodeName);
         }
 
     }

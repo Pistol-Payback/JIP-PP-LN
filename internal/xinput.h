@@ -28,6 +28,7 @@ struct XInputStateMods
 	UInt16		buttonTap;		// 04
 	UInt8		triggerMods;	// 06
 	UInt8		stickSkip;		// 07
+
 };
 extern XInputStateMods s_XIStateMods;
 
@@ -44,3 +45,5 @@ void __fastcall SetXIControlDisabled(UInt32 ctrlID, bool bDisable);
 void __fastcall SetXIControlHeld(UInt32 ctrlID, bool bHold);
 
 bool __fastcall TapXIControl(UInt32 ctrlID);
+
+UInt32 __fastcall ConvertCtrlCodeToMask(UInt32 rawCode);

@@ -98,7 +98,8 @@ struct NiBlockPathBuilder {
     [[nodiscard]] UInt8 size()   const noexcept { return length; }
     [[nodiscard]] bool  empty()  const noexcept { return length == 0; }
 
-    NiBlockPathStatic toStaticPath() {
+
+    NiBlockPathStatic toStaticPath(const NiBlockPathView& originalPath) {
         // Move the segments into the new heap buffer
         if (empty()) {
             return NiBlockPathStatic();

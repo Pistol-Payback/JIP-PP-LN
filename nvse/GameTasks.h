@@ -397,7 +397,7 @@ public:
 
 	// There are at least 3 Create/Initiator
 
-	static QueuedModel* LoadModel(QueuedFileEntry* queued, const char* filePath, UInt32 baseClass, void* refMap, bool flag3CBit0, bool flag3Bit5) {
+	static inline QueuedModel* LoadModel(QueuedFileEntry* queued, const char* filePath, UInt32 baseClass, void* refMap, bool flag3CBit0, bool flag3Bit5) {
 		return ThisCall<QueuedModel*>(0x43C6E0, queued, filePath, baseClass, refMap, flag3CBit0, flag3Bit5);
 	};
 
@@ -405,7 +405,7 @@ public:
 	void SetFlag(UInt8 f) { flags |= f; }
 	void ClearFlag(UInt8 f) { flags &= ~f; }
 
-	static QueuedModel* create() {
+	static inline QueuedModel* create() {
 		return CdeclCall<QueuedModel*>(0x0401000, 72);
 	}
 
@@ -565,7 +565,7 @@ public:
 // 40
 template <typename T_Key, typename T_Data> class LockFreeMap : public InterfacedClass
 {
-	Use_HashMapUtils(LockFreeMap)
+	friend HashMapUtils<LockFreeMap>;
 
 	struct Entry
 	{
@@ -731,9 +731,14 @@ struct ModelLoader
 	}
 
 	Model* FindCachedModel(const char* path) {
-		Model* m = nullptr;
+		Model* model = nullptr;
+		/*
 		if (FastCall<unsigned char>(0x4493D0, modelMap, path, &m))
-			return m;
+			return FastCall<unsigned char>(0x4493D0, modelMap, path);
+		*/
+		if (modelMap->Lookup(path, &model)) {
+			return model;
+		}
 		return nullptr;
 	}
 
@@ -814,21 +819,26 @@ struct ModelTemp {
 	/// Attempts to load (or reload) the model. Returns true on success.
 	bool load(const char* filePath) {
 
-		clonedNode = LoadModelCopy(filePath); //Uses asm version for now, because below seems to crash
+		//clonedNode = LoadModelCopy(filePath); //Uses asm version for now, because below seems to crash
 
-		return true;
+		//return true;
 		unload();  // if something was already loaded
 		// find or raw‑load
-		baseModel = g_modelLoader->FindCachedModel(filePath);
+
 		NiNode* root = nullptr;
+		baseModel = g_modelLoader->FindCachedModel(filePath);
+		if (baseModel) {
+			InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
+			tapped = true;
+			root = baseModel->niNode;
+			if (!root) return false;
+		}
+
+
 		if (!baseModel) {
 
-			//QMStack rawQM{};
-			//QueuedModel* qm = reinterpret_cast<QueuedModel*>(&rawQM);
-			//QueuedFile* qm1 = QueuedModel::create();
-
 			QueuedModel* src1 = QueuedModel::create();
-			QueuedModel* qm = QueuedModel::LoadModel((QueuedFileEntry*)src1, filePath, 0, nullptr, true, false);
+			QueuedModel* qm = QueuedModel::LoadModel(src1, filePath, 0, nullptr, true, false);
 
 			if (!qm) return false;
 
@@ -836,24 +846,21 @@ struct ModelTemp {
 
 			qm->Run();				//0x43CCF0
 			qm->UpdateBounds();		//0x43D180
-			//ThisCall<void>(0x43CCF0, qm);
-			//ThisCall<void>(0x43D180, qm);
 			ThisCall<void>(0x43C830, qm);
 
 			baseModel = qm->model;
+			InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
+			tapped = true;
+
 			root = baseModel->niNode;
 			if (!baseModel) return false;
 		}
-		else {
-			root = baseModel->niNode;
-			if (!root) return false;
-		}
 
 		// bump refcount if first use
-		if (baseModel->refCount == 0) {
-			InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
-			tapped = true;
-		}
+		//if (baseModel->refCount == 0) {
+			//InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
+			//tapped = true;
+		//}
 
 		// clone it
 		clonedNode = static_cast<NiNode*>(root->CreateCopy());
@@ -867,8 +874,9 @@ struct ModelTemp {
 			NiReleaseObject(clonedNode);
 			clonedNode = nullptr;
 		}
-		if (clonedNode && tapped) {
-			InterlockedDecrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
+		if (tapped) {
+			InterlockedDecrement(reinterpret_cast<volatile long*>(&baseModel->refCount)); //Game will clean this up the next frame if counter == 0
+			//baseModel->Destroy();
 			tapped = false;
 		}
 		baseModel = nullptr;

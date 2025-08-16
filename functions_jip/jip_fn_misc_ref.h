@@ -1680,11 +1680,12 @@ bool __fastcall RegisterInsertObject_Old(char *inData)
 
 
 //Version 57.41
+
 bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 {
 
 	//InsertObjectParams* params = new InsertObjectParams;
-	InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>(sizeof(InsertObjectParams));
+	InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
 	char* outForm = reinterpret_cast<char*>(&params->form);		// write form here
 	char* outMode = reinterpret_cast<char*>(&params->mode);		// write mode here
 	char* pathBuf = params->pathSpec;
@@ -1696,22 +1697,43 @@ bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 		if (!(params->isInstant()) || IsInMainThread())
 		{
 			//if (RegisterInsertObject_Old((char*)params))
-			if (RegisterInsertObject_New(*params))
+			if (RegisterInsertObject_New(*params)) {
 				*result = 1;
+			}
+			Pool_CFree<InsertObjectParams>(params);
 		}
 		//else MainLoopAddCallback(RegisterInsertObject_Old, params);
 		else MainLoopAddCallback(RegisterInsertObject_New, params);
 	}
-	else Pool_CFree(params, sizeof(InsertObjectParams));
+	else Pool_CFree<InsertObjectParams>(params);
 	return true;
 }
+
+/*
+bool Cmd_InsertNode_Execute(COMMAND_ARGS)
+{
+	char* dataStr = Pool_CAlloc(0x100);
+	if (ExtractFormatStringArgs(2, dataStr + 8, EXTRACT_ARGS_EX, kCommandInfo_InsertNode.numParams, dataStr, dataStr + 4))
+	{
+		((UInt8*)dataStr)[5] = kHookFormFlag6_InsertNode;
+		if (!(dataStr[4] & 2) || IsInMainThread())
+		{
+			if (RegisterInsertObject_Old(dataStr))
+				*result = 1;
+		}
+		else MainLoopAddCallback(RegisterInsertObject_Old, dataStr);
+	}
+	else Pool_CFree(dataStr, 0x100);
+	return true;
+}
+*/
 
 //Version 57.41
 bool Cmd_AttachModel_Execute(COMMAND_ARGS)
 {
 
 	//InsertObjectParams* params = new InsertObjectParams;
-	InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>(sizeof(InsertObjectParams));
+	InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
 	char* buf = params->pathSpec;								// the buffer to split
 	char* outForm = reinterpret_cast<char*>(&params->form);		// write form here
 	char* outMode = reinterpret_cast<char*>(&params->mode);		// write mode here
@@ -1724,16 +1746,36 @@ bool Cmd_AttachModel_Execute(COMMAND_ARGS)
 		if (!(params->isInstant()) || IsInMainThread())
 		{
 			//if (RegisterInsertObject_Old((char*)params))
-			if (RegisterInsertObject_New(*params))
+			if (RegisterInsertObject_New(*params)) {
 				*result = 1;
+			}
+			Pool_CFree<InsertObjectParams>(params);
+
 		}
 		//else MainLoopAddCallback(RegisterInsertObject_Old, params);
 		else MainLoopAddCallback(RegisterInsertObject_New, params);
 	}
-	else Pool_CFree(params, sizeof(InsertObjectParams));
+	else Pool_CFree<InsertObjectParams>(params);
 	return true;
 }
-
+/*
+bool Cmd_AttachModel_Execute(COMMAND_ARGS)
+{
+	char* dataStr = Pool_CAlloc(0x100);
+	if (ExtractFormatStringArgs(2, dataStr + 8, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, dataStr, dataStr + 4))
+	{
+		((UInt8*)dataStr)[5] = kHookFormFlag6_AttachModel;
+		if (!(dataStr[4] & 2) || IsInMainThread())
+		{
+			if (RegisterInsertObject_Old(dataStr))
+				*result = 1;
+		}
+		else MainLoopAddCallback(RegisterInsertObject_Old, dataStr);
+	}
+	else Pool_CFree(dataStr, 0x100);
+	return true;
+}
+*/
 bool Cmd_SynchronizePosition_Execute(COMMAND_ARGS)
 {
 	TESObjectREFR *targetRef = nullptr;
@@ -1783,7 +1825,7 @@ bool Cmd_ModelHasBlock_Execute(COMMAND_ARGS)
 				*result = foundNode;
 				return true;
 			}
-			else if (form->IsPlayer()) {
+			else if (refr->IsPlayer()) {
 				if (g_thePlayer->node1stPerson->DeepSearchBySparsePath(NiBlockPathBase(buffer))) {
 					foundNode = true;
 				}

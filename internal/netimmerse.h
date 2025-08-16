@@ -1708,8 +1708,8 @@ public:
 		kNiFlag_HighDetail =				0x01000000,
 		kNiFlag_ForceUpdate =				0x02000000,
 		kNiFlag_PreProcessedNode =			0x04000000,
-		kNiFlag_UnkBit27 =					0x08000000,
-		kNiFlag_UnkBit28 =					0x10000000,
+		kNiFlag_DynamicPlayerNode =			0x08000000,
+		kNiFlag_Imposter =					0x10000000,
 		kNiFlag_IsPointLight =				0x20000000,	//	JIP only
 		kNiFlag_DoneInitLights =			0x40000000,	//	JIP only
 		kNiFlag_IsInserted =				0x80000000	//	JIP only

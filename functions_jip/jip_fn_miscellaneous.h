@@ -32,7 +32,7 @@ DEFINE_COMMAND_PLUGIN(GetLocalGravity, 0, kParams_OneAxis);
 DEFINE_COMMAND_PLUGIN(SetLocalGravityVector, 0, kParams_ThreeFloats);
 DEFINE_COMMAND_PLUGIN(GetReticlePos, 0, kParams_OneOptionalInt_OneOptionalFloat);
 DEFINE_COMMAND_PLUGIN(GetReticleRange, 0, kParams_OneOptionalInt_OneOptionalFloat_OneOptionalInt);
-DEFINE_COMMAND_PLUGIN(SetOnDialogTopicEventHandler, 0, kParams_OneForm_OneInt_OneForm);
+DEFINE_COMMAND_PLUGIN(SetOnDialogTopicEventHandler, 0, kParams_OneForm_OneInt_OneOptionalForm);
 DEFINE_COMMAND_PLUGIN(GetGameDaysPassed, 0, kParams_ThreeOptionalInts);
 DEFINE_CMD_COND_PLUGIN(IsPCInCombat, 0, nullptr);
 DEFINE_COMMAND_PLUGIN(ToggleHardcoreTracking, 0, kParams_OneInt);
@@ -572,6 +572,7 @@ bool Cmd_GetReticleRange_Execute(COMMAND_ARGS)
 	return true;
 }
 
+/*
 bool Cmd_SetOnDialogTopicEventHandler_Execute(COMMAND_ARGS)
 {
 	Script *script;
@@ -582,14 +583,55 @@ bool Cmd_SetOnDialogTopicEventHandler_Execute(COMMAND_ARGS)
 		{
 			EventCallbackScripts *callbacks;
 			if (s_dialogTopicEventMap->Insert(form, &callbacks))
-				HOOK_INC(RunResultScript);
+				s_hookInfos[kHook_RunResultScript].ModUsers(true);
 			callbacks->Insert(script);
 		}
 		else if (auto findTopic = s_dialogTopicEventMap->Find(form); findTopic && findTopic().Erase(script) && findTopic().Empty())
 		{
 			findTopic.Remove();
-			HOOK_DEC(RunResultScript);
+			s_hookInfos[kHook_RunResultScript].ModUsers(false);
 		}
+	return true;
+}
+*/
+
+bool Cmd_SetOnDialogTopicEventHandler_Execute(COMMAND_ARGS)
+{
+	Script* script = nullptr;
+	UInt32   addEvnt = 0;
+	TESForm* form = nullptr;
+
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &script, &addEvnt, &form) || !IS_ID(script, Script))
+		return true;
+
+	// Only type-check if non-null; otherwise treat as "global" (nullptr key).
+	TESForm* key = nullptr;
+	if (form) {
+		if (IS_ID(form, TESTopic) || IS_ID(form, TESTopicInfo)) {
+			key = form;
+		}
+		else {
+			Console_Print("SetOnDialogTopicEventHandler tried to use a non Topic or TopicInfo form as a filter");
+			return false;
+		}
+	}
+
+	if (addEvnt) {
+		EventCallbackScripts* callbacks = nullptr;
+		if (s_dialogTopicEventMap->Insert(key, &callbacks)) {
+			// first time this key is created
+			s_hookInfos[kHook_RunResultScript].ModUsers(true);
+		}
+		callbacks->Insert(script);
+	}
+	else {
+		if (auto it = s_dialogTopicEventMap->Find(key); it && it().Erase(script) && it().Empty())
+		{
+			it.Remove();
+			s_hookInfos[kHook_RunResultScript].ModUsers(false);
+		}
+	}
+
 	return true;
 }
 

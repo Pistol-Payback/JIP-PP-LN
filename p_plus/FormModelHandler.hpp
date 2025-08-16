@@ -24,6 +24,8 @@ class FormRuntimeModelManager
     FormRuntimeModelManager() = default;
     ~FormRuntimeModelManager() = default;
 
+    static FormRuntimeModelManager s_nodeManager;
+
 public:
 
     NiRuntimeNodeVector& getFirstPersonModelList() {
@@ -31,7 +33,6 @@ public:
     }
 
     static FormRuntimeModelManager& getSingleton() {
-        static FormRuntimeModelManager s_nodeManager;
         return s_nodeManager;
     }
 
@@ -129,6 +130,9 @@ public:
         // Fallback: fully built model search
         if (const char* path = form->GetModelPath()) {
             ModelTemp temp = ModelTemp(path);
+            if (!temp.clonedNode) { //Model failed to load
+                return false;
+            }
             temp.clonedNode->attachRuntimeNodes(getNodesList(form));
             if (NiNode* liveRoot = temp.clonedNode) {
                 if (liveRoot->DeepSearchBySparsePath(pathToFind)) {
@@ -171,6 +175,9 @@ public:
         // Fallback: fully built model search
         if (const char* path = form->GetModelPath()) {
             ModelTemp temp = ModelTemp(path);
+            if (!temp.clonedNode) { //Model failed to load
+                return false;
+            }
             temp.clonedNode->attachRuntimeNodes(getNodesList(form));
             if (NiNode* liveRoot = temp.clonedNode) {
                 if (liveRoot->DeepSearchBySparsePath(NiBlockPathBase(fullPath))) {
@@ -230,6 +237,10 @@ public:
                 root->attachRuntimeNodes(getNodesList(form));
             }
 
+        }
+
+        if (!root) {
+            return false; //Model failed to load
         }
 
         if (!pathList) {
@@ -296,6 +307,10 @@ public:
                 root->attachRuntimeNodes(getNodesList(form));
             }
 
+        }
+
+        if (!root) {
+            return false; //Model failed to load
         }
 
         if (!pathList) {
@@ -385,6 +400,9 @@ public:
 
         //Rework this, we only need to extract the root node, no need to copy the whole tree
         ModelTemp tempModel = ModelTemp(modelPath);
+        if (!tempModel.clonedNode) {
+            return false; //Model failed to load
+        }
 
         NiFixedString fullBlockName;
         if (outSuffix) {

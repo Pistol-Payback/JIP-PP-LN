@@ -2239,6 +2239,7 @@ __declspec(naked) void SetQuestStageHook()
 
 TempObject<UnorderedMap<TESForm*, EventCallbackScripts>> s_dialogTopicEventMap;
 
+/*
 __declspec(naked) void RunResultScriptHook()
 {
 	__asm
@@ -2273,6 +2274,65 @@ __declspec(naked) void RunResultScriptHook()
 		mov		ecx, [ebp-0xC]
 		CALL_EAX(0x61EB60)
 		JMP_EDX(0x61F190)
+	}
+}
+*/
+
+// ----- contains all the logic the naked stub used to do -----
+__declspec(noinline) void __cdecl RunDialogTopicEvents(TESTopicInfo* info, UInt32 onEnd, TESObjectREFR* refr)
+{
+	if (!info || onEnd != 0) return;
+
+	//Check for filterless
+	if (auto* scripts = s_dialogTopicEventMap->GetPtr(nullptr)) {
+		scripts->InvokeEventsThis1(refr, (UInt32)(info));
+	}
+
+	//the info itself
+	if (auto* scripts = s_dialogTopicEventMap->GetPtr(info)) {
+		scripts->InvokeEventsThis1(refr, (UInt32)(info));
+	}
+
+	//the parent topic (TESTopic* derives from TESForm)
+	if (auto* parent = info->parentTopic) {
+		if (auto* scripts2 = s_dialogTopicEventMap->GetPtr(parent)) {
+			scripts2->InvokeEventsThis1(refr, (UInt32)(parent));
+		}
+	}
+}
+
+// ----- Trampoline site specifics -----
+// We’re hooked at 0x61F184 and must:
+//   run our helper
+//   replicate:  mov eax,[ebp+8]; push eax; mov ecx,[ebp-0xC]; call 0x61EB60
+//   jump back to 0x61F190 (right after the original call)
+__declspec(naked) void RunResultScriptHook()
+{
+	__asm {
+		// gather args from caller's frame
+		mov  eax, [ebp - 0x0C]        // info = TESTopicInfo*
+		mov  edx, [ebp + 0x0C]        // refr = TESObjectREFR*
+		mov  ecx, [ebp + 0x08]        // onEnd
+
+		// push in REVERSE of the function signature:
+		// RunDialogTopicEvents(info, onEnd, refr)
+		push edx   // refr (3rd param)
+		push ecx   // onEnd (2nd param)
+		push eax   // info (1st param)
+		call RunDialogTopicEvents
+		add  esp, 12
+
+		// Reproduce original instructions we overwrote:
+		//   mov eax,[ebp+8]; push eax; mov ecx,[ebp-0xC]; call 0x61EB60
+		mov  eax, [ebp + 0x08]
+		push eax
+		mov  ecx, [ebp - 0x0C]
+		mov  eax, 0x61EB60          // TESTopicInfo::GetResultScript(this,onEnd)
+		call eax
+
+		// Continue original flow
+		mov  edx, 0x61F190
+		jmp  edx
 	}
 }
 
@@ -2890,7 +2950,7 @@ void __fastcall InitPointLightsIter(NiNode* node, NiNode* parent)
 
 	NiAVObject** children = node->m_children.data;
 	for (int i = 0; i < count; ++i) {
-		NiAVObject* obj = children[i];
+		NiAVObject*& obj = children[i];
 		if (!obj)
 			continue;
 
@@ -2913,7 +2973,7 @@ void __fastcall InitPointLights(NiNode* rootNode)
 
 	NiAVObject** children = rootNode->m_children.data;
 	for (int i = 0; i < count; ++i) {
-		NiAVObject* child = children[i];
+		NiAVObject*& child = children[i];
 		if (!child)
 			continue;
 
@@ -3800,6 +3860,7 @@ namespace ThreadTasks {
 		*reinterpret_cast<BSTask**>(threadBlock + kTaskOffset) = task;
 	}
 }
+
 /*
 void __fastcall DoQueuedReferenceHook(QueuedReference* qr)
 {
@@ -3878,7 +3939,9 @@ void __fastcall DoQueuedReferenceHook(QueuedReference* qr)
 					if ((refr->jipFormFlags6 | base2->jipFormFlags6) & mask) {
 
 						root->refreshRuntimeNodes(refr->getRuntimeNodes(), base2->getRuntimeNodes());
-
+						//if (IS_ACTOR(base2)) {
+							//((Actor*)refr)->RefreshAnimData();
+						//}
 						// This is for the player, but idk why its here.
 						//if (refr->refID == 20 && refr->mods.m_listHead.next) {
 							//auto* next = reinterpret_cast<NiNode*>(refr->mods.m_listHead.next);
@@ -4035,7 +4098,6 @@ __declspec(naked) void __fastcall DoQueuedReferenceHook(QueuedReference *queuedR
 		retn
 	}
 }
-
 
 __declspec(naked) void LoadBip01SlotHook()
 {
@@ -5477,7 +5539,7 @@ __declspec(noinline) void InitJIPHooks()
 	HOOK_INIT_CALL(0x79EBA1, CreateMapMarkers);
 	HOOK_INIT_JUMP(0x55D520, GetRefName);
 	HOOK_INIT_JUMP(0x60F4A9, SetQuestStage);
-	HOOK_INIT_JUMP(0x61F184, RunResultScript);
+	HOOK_INIT_JUMP(0x61F184, RunResultScript); //RunResultScriptHook
 	HOOK_INIT_LIST(ScriptWait, {0x5E0EC9, ScriptRunnerHook, 5, 0xE8}, {0x5E1716, EvalEventBlockHook, 5, 0xE9});
 	HOOK_INIT_CALL(0x7FEF0B, SetTerminalModel);
 	HOOK_INIT_JUMP(0x7F54B1, AddVATSTarget);

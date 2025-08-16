@@ -459,3 +459,27 @@ __declspec(noinline) bool __fastcall TapXIControl(UInt32 ctrlID)
 			return false;
 	}
 }
+
+UInt32 __fastcall ConvertCtrlCodeToMask(UInt32 rawCode)
+{
+	switch (rawCode) {
+	case kXboxCtrl_DPAD_UP:           return kXboxMask_DPAD_UP;
+	case kXboxCtrl_DPAD_DOWN:         return kXboxMask_DPAD_DOWN;
+	case kXboxCtrl_DPAD_LEFT:         return kXboxMask_DPAD_LEFT;
+	case kXboxCtrl_DPAD_RIGHT:        return kXboxMask_DPAD_RIGHT;
+	case kXboxCtrl_START:             return kXboxMask_START;
+	case kXboxCtrl_BACK:              return kXboxMask_BACK;
+	case kXboxCtrl_LS_BUTTON:         return kXboxMask_LS_BUTTON;
+	case kXboxCtrl_RS_BUTTON:         return kXboxMask_RS_BUTTON;
+	case kXboxCtrl_LB:                return kXboxMask_LB;
+	case kXboxCtrl_RB:                return kXboxMask_RB;
+	case kXboxCtrl_BUTTON_A:          return kXboxMask_BUTTON_A;
+	case kXboxCtrl_BUTTON_B:          return kXboxMask_BUTTON_B;
+	case kXboxCtrl_BUTTON_X:          return kXboxMask_BUTTON_X;
+	case kXboxCtrl_BUTTON_Y:          return kXboxMask_BUTTON_Y;
+		// triggers and sticks aren’t bit-flags, so you’d either handle them specially
+		// or return 0 here and let your press-test function do the work.
+	default:
+		return 0;
+	}
+}

@@ -465,4 +465,5 @@ void InitCmdPatches()
 	cmdInfo->execute = Hook_IsPluginInstalled_Execute;
 	cmdInfo = GetCmdByOpcode(0x15E0);
 	cmdInfo->execute = Hook_GetPluginVersion_Execute;
+
 }
