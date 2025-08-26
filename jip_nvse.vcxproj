@@ -290,12 +290,14 @@
     <ClInclude Include="nvse\ParamInfos.h" />
     <ClInclude Include="nvse\PluginAPI.h" />
     <ClInclude Include="p_plus\FormModelHandler.hpp" />
+    <ClInclude Include="p_plus\GamePatchesINI.hpp" />
     <ClInclude Include="p_plus\NiBlockPathBuilder.hpp" />
     <ClInclude Include="p_plus\NiBlockPath.hpp" />
     <ClInclude Include="p_plus\NiFixedString.hpp" />
     <ClInclude Include="p_plus\NiRuntimeNode.hpp" />
     <ClInclude Include="p_plus\pBitMask.hpp" />
     <ClInclude Include="p_plus\pPrefix.hpp" />
+    <ClInclude Include="p_plus\pSmallBuffer.hpp" />
     <ClInclude Include="p_plus\RuntimeNodeVector.hpp" />
     <ClInclude Include="p_plus\VectorSortedView.hpp" />
   </ItemGroup>

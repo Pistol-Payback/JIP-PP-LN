@@ -796,9 +796,48 @@ extern NiNode* __fastcall LoadModelCopy(const char* filePath);
 
 struct ModelTemp {
 
-	NiNode*   clonedNode = nullptr;  // your cloned NiNode
-	Model*	  baseModel = nullptr;  // the underlying Model*
+	NiNode* clonedNode = nullptr;  // your cloned NiNode
+
+	union {
+		Model* baseModel = nullptr;  // the underlying Model*
+		const char* filePath;		//Load without file path
+	};
+
 	bool      tapped = false;    // did we bump the refcount?
+
+	ModelTemp(ModelTemp&& other){
+		clonedNode = other.clonedNode;
+		baseModel = other.baseModel;
+		tapped = other.tapped;
+		other.baseModel = nullptr;
+		other.clonedNode = nullptr;
+		other.tapped = false;
+	}
+
+	ModelTemp& operator=(ModelTemp&& other) noexcept {
+		if (this != &other) {
+			unload();
+			clonedNode = other.clonedNode;
+			baseModel = other.baseModel;
+			tapped = other.tapped;
+			other.clonedNode = nullptr;
+			other.baseModel = nullptr;
+			other.tapped = false;
+		}
+		return *this;
+	}
+
+	// Disallow copies
+	ModelTemp(const ModelTemp&) = delete;
+	ModelTemp& operator=(const ModelTemp&) = delete;
+
+	explicit ModelTemp(const char* filePath) {
+		load(filePath);
+	}
+
+	ModelTemp() = default;
+
+	~ModelTemp() { unload(); }
 
 	NiNode* detachNode() {
 		NiNode* result = clonedNode;
@@ -806,18 +845,34 @@ struct ModelTemp {
 		return result;
 	}
 
+	NiNode* detachCopyNode() {
+		NiNode* result = (NiNode*)clonedNode->CreateCopy();
+		return result;
+	}
+
 	bool isValid() {
 		return clonedNode != nullptr;
 	}
 
-	explicit ModelTemp(const char* filePath) {
+	//For embedded file paths
+	bool hasFilePathReadyForLoad() {
+		return filePath != nullptr;
+	}
+
+	//assums filePath comes from union
+	inline bool load() {
+		//Fail if the model is already loaded, or file path union wasn't init.
+		if (!filePath) {
+			throw std::logic_error("ModelTemp::load() called with no filePath initialized.");
+		}
+		if (clonedNode) {
+			throw std::logic_error("ModelTemp::load() called but model is already loaded.");
+		}
 		load(filePath);
 	}
-	ModelTemp() = default;
-	~ModelTemp() { unload(); }
 
 	/// Attempts to load (or reload) the model. Returns true on success.
-	bool load(const char* filePath) {
+	inline bool load(const char* _filePath) {
 
 		//clonedNode = LoadModelCopy(filePath); //Uses asm version for now, because below seems to crash
 
@@ -826,7 +881,7 @@ struct ModelTemp {
 		// find or raw‑load
 
 		NiNode* root = nullptr;
-		baseModel = g_modelLoader->FindCachedModel(filePath);
+		baseModel = g_modelLoader->FindCachedModel(_filePath);
 		if (baseModel) {
 			InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
 			tapped = true;
@@ -838,7 +893,7 @@ struct ModelTemp {
 		if (!baseModel) {
 
 			QueuedModel* src1 = QueuedModel::create();
-			QueuedModel* qm = QueuedModel::LoadModel(src1, filePath, 0, nullptr, true, false);
+			QueuedModel* qm = QueuedModel::LoadModel(src1, _filePath, 0, nullptr, true, false);
 
 			if (!qm) return false;
 
@@ -874,7 +929,7 @@ struct ModelTemp {
 			NiReleaseObject(clonedNode);
 			clonedNode = nullptr;
 		}
-		if (tapped) {
+		if (tapped && baseModel) {
 			InterlockedDecrement(reinterpret_cast<volatile long*>(&baseModel->refCount)); //Game will clean this up the next frame if counter == 0
 			//baseModel->Destroy();
 			tapped = false;

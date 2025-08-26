@@ -99,7 +99,7 @@ struct NiBlockPathBuilder {
     [[nodiscard]] bool  empty()  const noexcept { return length == 0; }
 
 
-    NiBlockPathStatic toStaticPath(const NiBlockPathView& originalPath) {
+    NiBlockPathStatic toStaticPath() {
         // Move the segments into the new heap buffer
         if (empty()) {
             return NiBlockPathStatic();
@@ -107,4 +107,44 @@ struct NiBlockPathBuilder {
         return NiBlockPathStatic{ parents.begin(), parents.begin() + length };
     }
 
+    bool operator==(const NiBlockPathBuilder& rhs) const noexcept {
+        if (length != rhs.length) return false;
+        for (UInt8 i = 0; i < length; ++i) {
+            if (!(parents[i].getBlockName() == rhs.parents[i].getBlockName()))
+                return false;
+        }
+        return true;
+    }
+
+    bool operator!=(const NiBlockPathBuilder& rhs) const noexcept {
+        return !(*this == rhs);
+    }
+
 };
+
+inline bool operator==(const NiBlockPathView& lhs, const NiBlockPathBuilder& rhs) noexcept
+{
+    if (lhs.size() != rhs.size()) return false;
+    for (uint32_t i = 0; i < lhs.size(); ++i) {
+        if (!(lhs[i] == rhs.parents[i].getBlockName()))
+            return false;
+    }
+    return true;
+}
+
+inline bool operator!=(const NiBlockPathView& lhs,
+    const NiBlockPathBuilder& rhs) noexcept
+{
+    return !(lhs == rhs);
+}
+
+// builder == view (delegate to the other direction)
+inline bool operator==(const NiBlockPathBuilder& lhs, const NiBlockPathView& rhs) noexcept
+{
+    return rhs == lhs;
+}
+
+inline bool operator!=(const NiBlockPathBuilder& lhs, const NiBlockPathView& rhs) noexcept
+{
+    return !(lhs == rhs);
+}

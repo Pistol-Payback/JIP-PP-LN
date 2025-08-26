@@ -19,9 +19,12 @@
 #include <alloca.h>
 #define ALLOCA alloca
 #endif
+#include "p_plus/pSmallBuffer.hpp"
 
 //template<typename U>
 //concept PathPart = std::same_as<U, NiFixedString> || std::same_as<U, NiBlockPathBase>;
+
+struct NiRuntimeNodeVector;
 
 template<typename U>
 concept PathPart =
@@ -40,6 +43,7 @@ struct IndexLinkedList {
 };
 
 struct RefModel {
+
     NiFixedString suffix;
     uint32_t    refID;
 
@@ -52,9 +56,86 @@ struct RefModel {
         : suffix(sfx)
         , refID(id)
     {}
+
+    inline std::string reverseFormat(TESForm*& form) const {
+        form = LookupFormByRefID(refID);
+        if (suffix.isValid() == false) {
+            return "";
+        }
+        return "*" + suffix.ToString() + "*";
+    }
+
+    bool operator==(const RefModel& other) const noexcept {
+        return refID == other.refID && suffix == other.suffix;
+    }
+
+    bool operator!=(const RefModel& other) const noexcept {
+        return !(*this == other);
+    }
+
+    inline ModelTemp getRuntimeModel() const {
+
+        if (TESForm* form = LookupFormByRefID(refID)) {
+            return getRuntimeModel(form);
+        }
+
+        return ModelTemp();
+
+    }
+
+    //Not sure if its a good idea to let RefModel handle all this logic
+    inline ModelTemp getRuntimeModel(TESForm* form) const {
+
+        const char* modelPath = form->GetModelPath();
+        if (!modelPath || !modelPathExists(modelPath)) {
+            return ModelTemp();
+        }
+
+        ModelTemp tempModel(modelPath);
+
+        if (!tempModel.clonedNode) {
+            return ModelTemp();
+        }
+        tempModel.clonedNode->attachAllRuntimeNodes(form->getRuntimeNodes());
+        tempModel.clonedNode->AddSuffixToAllChildren(suffix.getPtr());
+        tempModel.clonedNode->RemoveCollision(); //Prevents invalid collision
+        tempModel.clonedNode->DownwardsInitPointLights(tempModel.clonedNode);
+        tempModel.clonedNode->AddPointLights();
+
+        return tempModel;
+
+    }
+
+    inline ModelTemp getRuntimeModel(NiRuntimeNodeVector*& resultVector) const {
+
+        if (TESForm* form = LookupFormByRefID(refID)) {
+            const char* modelPath = form->GetModelPath();
+            if (!modelPath || !modelPathExists(modelPath)) {
+                return ModelTemp();
+            }
+            ModelTemp tempModel{};
+            resultVector = form->getRuntimeNodes();
+            tempModel.filePath = modelPath;
+            return tempModel;
+        }
+
+        return ModelTemp();
+
+    }
+
+    void reverseFormatTo(pSmallBufferWriter& buf, TESForm*& outForm) const noexcept {
+        outForm = LookupFormByRefID(refID);
+        if (suffix.isValid()) {
+            buf.pushChar('*');
+            buf.appendFixed(suffix);
+            buf.pushChar('*');
+        }
+    }
+
 };
 
 struct ModelPath {
+
     NiFixedString suffix;
     NiFixedString path;
 
@@ -67,6 +148,30 @@ struct ModelPath {
         : suffix(sfx)
         , path(pth)
     {}
+
+    ModelPath(const ModelPath& pth) noexcept
+        : suffix(pth.suffix)
+        , path(pth.path)
+    {
+    }
+
+    bool operator==(const ModelPath& other) const noexcept {
+        return path == other.path && suffix == other.suffix;
+    }
+
+    bool operator!=(const ModelPath& other) const noexcept {
+        return !(*this == other);
+    }
+
+    void reverseFormatTo(pSmallBufferWriter& buf) const noexcept {
+        if (suffix.isValid()) {
+            buf.pushChar('*');
+            buf.appendFixed(suffix);
+            buf.pushChar('*');
+        }
+        buf.appendFixed(path);
+    }
+
 };
 
 struct NiToken {
@@ -91,6 +196,22 @@ struct NiToken {
     explicit NiToken(const char* path, const char* suffix)
         : data(ModelPath{ path, suffix }) {}
     explicit NiToken(const IndexLinkedList& l) : data(l) {}
+
+    explicit NiToken(ModelPath&& modelPath) noexcept(std::is_nothrow_move_constructible_v<ModelPath>)
+        : data(std::in_place_type<ModelPath>, std::move(modelPath)) {
+    }
+
+    explicit NiToken(const ModelPath& modelPath) noexcept
+        : data(modelPath) {
+    }
+
+    explicit NiToken(RefModel&& refModel) noexcept(std::is_nothrow_move_constructible_v<RefModel>)
+        : data(std::in_place_type<RefModel>, std::move(refModel)) {
+    }
+
+    explicit NiToken(const RefModel& refModel) noexcept
+        : data(refModel) {
+    }
 
     //–– copy/move/assign/destruct –– defaults are correct for std::variant
     NiToken(const NiToken&) = default;
@@ -141,7 +262,7 @@ public:
     {}
 
     // construct from raw pointer+length
-    constexpr NiBlockPathView(NiFixedString * nodes, uint32_t length) noexcept
+    constexpr NiBlockPathView(NiFixedString* nodes, uint32_t length) noexcept
         : _nodes(nodes), _length(length)
     {}
 
@@ -265,14 +386,21 @@ public:
         other._length = 0;
     }
 
+    // --- new: zero out & free storage ---
+    void clear() noexcept {
+        for (uint32_t i = 0; i < _length; ++i)
+            _nodes[i].~NiFixedString();
+        ::operator delete[](_nodes);
+        _nodes = nullptr;
+        _length = 0;
+    }
+
     NiBlockPathBase& operator=(NiBlockPathBase&& other) noexcept {
 
         if (this != &other) {
 
             // destroy our own contents
-            for (uint32_t i = 0; i < _length; ++i)
-                _nodes[i].~NiFixedString();
-            ::operator delete[](_nodes);
+            clear();
 
             // then steal
             _nodes = other._nodes;
@@ -312,10 +440,56 @@ public:
     }
 
     ~NiBlockPathBase() {
-        for (uint32_t i = 0; i < _length; ++i) {
-            _nodes[i].~NiFixedString();
+        clear();
+    }
+
+    [[nodiscard]] NiBlockPathBase createCopy() const {
+        NiBlockPathBase out;
+        out._length = _length;
+
+        if (out._length == 0) {
+            out._nodes = nullptr;
+            return out;
         }
-        ::operator delete[](_nodes);
+
+        out._nodes = static_cast<NiFixedString*>(
+            ::operator new[](out._length * sizeof(NiFixedString))
+            );
+
+        // NiFixedString copy ctor just increments refcount
+        for (uint32_t i = 0; i < out._length; ++i)
+            new (&out._nodes[i]) NiFixedString(_nodes[i]);
+
+        return out;
+    }
+
+    [[nodiscard]] static NiBlockPathBase createCopy(const NiBlockPathView& view) {
+        NiBlockPathBase out;
+        out._length = view._length;
+
+        if (out._length == 0) {
+            out._nodes = nullptr;
+            return out;
+        }
+
+        out._nodes = static_cast<NiFixedString*>(
+            ::operator new[](out._length * sizeof(NiFixedString))
+            );
+
+        const NiFixedString* src = view._nodes;
+        for (uint32_t i = 0; i < out._length; ++i)
+            new (&out._nodes[i]) NiFixedString(src[i]);
+
+        return out;
+    }
+
+    inline void appendSparsePath(pSmallBufferWriter& buf) const noexcept {
+
+        for (const auto& seg : *this) {
+            buf.pushChar('\\');
+            buf.appendFixed(seg);
+        }
+
     }
 
 protected:
@@ -375,6 +549,8 @@ struct NiBlockPathStatic : public NiBlockPathBase {
     using NiBlockPathBase::containsPathSuffix;
     using NiBlockPathBase::containsSparsePath;
 
+
+    //Raw might not be needed anymore, waste of space.
     //Original Path
     std::string raw; //for fast comparision lookups, so we dont need to create a bunch of NiFixedStrings when comparing a const char* path
 
@@ -433,6 +609,68 @@ struct NiBlockPathStatic : public NiBlockPathBase {
     }
 
     ~NiBlockPathStatic() = default;
+
+    [[nodiscard]] NiBlockPathStatic createCopy() const {
+
+        NiBlockPathStatic out;
+        out._length = _length;
+        if (out._length == 0) {
+            out._nodes = nullptr;
+            out.raw.clear();
+            return out;
+        }
+
+        // allocate nodes
+        out._nodes = static_cast<NiFixedString*>(
+            ::operator new[](out._length * sizeof(NiFixedString))
+            );
+
+        // Copy-construct NiFixedString (bumps refcounts)
+        for (uint32_t i = 0; i < out._length; ++i)
+            new (&out._nodes[i]) NiFixedString(_nodes[i]);
+
+        // raw is a simple string copy
+        out.raw = raw;
+        return out;
+    }
+
+    [[nodiscard]] static NiBlockPathStatic createCopy(const NiBlockPathView& view) {
+
+        NiBlockPathStatic out;
+        out._length = view._length;
+        if (out._length == 0) {
+            out._nodes = nullptr;
+            out.raw.clear();
+            return out;
+        }
+
+        // allocate nodes
+        out._nodes = static_cast<NiFixedString*>(
+            ::operator new[](out._length * sizeof(NiFixedString))
+            );
+
+        // Copy-construct from view’s nodes
+        const NiFixedString* src = view._nodes;
+        for (uint32_t i = 0; i < out._length; ++i)
+            new (&out._nodes[i]) NiFixedString(src[i]);
+
+        // reconstruct raw from nodes
+        // (avoids needing a raw in the view)
+        {
+            out.raw.clear();
+            out.raw.reserve(
+                (out._length ? out._length - 1 : 0) +
+                std::accumulate(src, src + out._length, size_t(0),
+                    [](size_t acc, const NiFixedString& s) { return acc + s.Length(); })
+            );
+            for (uint32_t i = 0; i < out._length; ++i) {
+                if (i) out.raw.push_back('\\');
+                out.raw.append(src[i].CStr());
+            }
+        }
+
+        return out;
+    }
 
     // disallow copy
     NiBlockPathStatic(const NiBlockPathStatic&) = delete;

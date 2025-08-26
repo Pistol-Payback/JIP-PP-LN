@@ -429,6 +429,7 @@ __declspec(noinline) void TESForm::SetJIPFlag(UInt16 jipFlag, bool bSet)
 
 TempObject<UnorderedSet<UInt32>> s_eventInformedObjects;
 
+//This seems to be non-owning. You'll need to manually clean up thisObj member
 struct MainLoopCallback
 {
 	union								// 00
@@ -3728,23 +3729,24 @@ bool s_insertObjects = true;
 
 //Version 57.41
 void __fastcall DoInsertObjects_New(TESForm* form1, TESForm* form2, NiNode* rootNode) {
+
 	// insert-node phase
-		NiRuntimeNodeVector* refNodes = nullptr;
-		NiRuntimeNodeVector* baseFormNodes = nullptr;
-		if (form1) {
+	NiRuntimeNodeVector* refNodes = nullptr;
+	NiRuntimeNodeVector* baseFormNodes = nullptr;
+	if (form1) {
 
-			refNodes = form1->getRuntimeNodes();
+		refNodes = form1->getRuntimeNodes(); //3rd person
 
-			if (form1->IsPlayer()) {
-				g_thePlayer->node1stPerson->refreshRuntimeNodes(form1->getFirstPersonRuntimeNodes(), nullptr);
-			}
-
-		}
-		if (form2) {
-			baseFormNodes = form2->getRuntimeNodes();
+		if (form1->IsPlayer()) {
+			g_thePlayer->node1stPerson->refreshRuntimeNodes(form1->getFirstPersonRuntimeNodes(), nullptr);
 		}
 
-		rootNode->refreshRuntimeNodes(refNodes, baseFormNodes);
+	}
+	if (form2) {
+		baseFormNodes = form2->getRuntimeNodes();
+	}
+
+	rootNode->refreshRuntimeNodes(refNodes, baseFormNodes);
 
 }
 

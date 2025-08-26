@@ -9,6 +9,9 @@ DEFINE_COMMAND_PLUGIN(HasActionRef, 1, nullptr);
 DEFINE_COMMAND_PLUGIN(GetRadius, 0, kParams_OneOptionalForm);
 DEFINE_COMMAND_PLUGIN(SetRadius, 0, kParams_OneFloat_OneOptionalForm);
 
+//57.48
+DEFINE_COMMAND_PLUGIN(RefreshInventoryWeight, 1, nullptr);
+
 bool Cmd_IsParentActivateOnly_Execute(COMMAND_ARGS)
 {
 	TESObjectREFR *refr = nullptr;
@@ -30,10 +33,22 @@ bool Cmd_SetBaseForm_Execute(COMMAND_ARGS)
 	return true;
 }
 
+bool Cmd_RefreshInventoryWeight_Execute(COMMAND_ARGS)
+{
+	if (IS_ACTOR(thisObj)) {
+		((Actor*)thisObj)->RefreshInventoryWeight(thisObj);
+	}
+	return true;
+}
+
 bool Cmd_GetInventoryWeight_Execute(COMMAND_ARGS)
 {
-	if (auto xChanges = GetExtraType(&thisObj->extraDataList, ExtraContainerChanges); xChanges && xChanges->data)
-		*result = xChanges->data->GetInventoryWeight();
+	UInt32 excludeNonPlayable = true;
+	if (!containingObj && ExtractArgsEx(EXTRACT_ARGS_EX, &excludeNonPlayable))
+	{
+		if (auto xChanges = GetExtraType(&thisObj->extraDataList, ExtraContainerChanges); xChanges && xChanges->data)
+			*result = xChanges->data->pGetInventoryWeight(excludeNonPlayable);
+	}
 	DoConsolePrint(result);
 	return true;
 }

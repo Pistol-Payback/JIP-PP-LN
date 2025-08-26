@@ -383,7 +383,7 @@ __declspec(noinline) double __fastcall GetEncumbranceRate(TESObjectREFR *thisObj
 		{
 			double maxWeight = ThisCall<double>(0x8A0C20, thisObj);
 			if (maxWeight > 0)
-				return 100 * xChanges->data->GetInventoryWeight() / maxWeight;
+				return 100 * xChanges->data->pGetInventoryWeight() / maxWeight;
 		}
 	return 0;
 }

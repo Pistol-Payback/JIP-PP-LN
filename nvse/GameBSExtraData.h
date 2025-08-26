@@ -32,7 +32,10 @@ struct BaseExtraList
 
 	bool HasType(UInt32 type) const;
 	void __fastcall SetTypePresent(UInt32 type, bool present);
-	BSExtraData *GetByType(UInt32 xType) const;
+
+	BSExtraData* GetByType(UInt32 extraType) const;
+	BSExtraData* GetByType_p(UInt32 xType) const;
+
 	__forceinline BSExtraData *AddExtra(BSExtraData *toAdd)
 	{
 		return ThisCall<BSExtraData*>(ADDR_AddExtraData, this, toAdd);

@@ -1,4 +1,23 @@
 #pragma once
+#include "p_plus/GamePatchesINI.hpp"
+
+bool EnsureIniWithDefaults()
+{
+	namespace fs = std::filesystem;
+	fs::path p(kIniPath);
+
+	if (fs::exists(p))
+		return true;
+
+	std::error_code ec;
+	fs::create_directories(p.parent_path(), ec);
+
+	std::ofstream out(p, std::ios::binary);
+	if (!out) return false;
+	out.write(kDefaultIni, sizeof(kDefaultIni) - 1);
+	out.flush();
+	return out.good();
+}
 
 __declspec(naked) void InitTopicInfoHook()
 {
@@ -5472,41 +5491,43 @@ void InitGamePatches()
 	if (!s_overrideBSAFiles->Empty())
 		WriteRelCall(0x463855, (UInt32)LoadBSAFileHook);
 
-	SInt32 lines = GetPrivateProfileSection("GamePatches", buffer, 0x10000, "Data\\NVSE\\plugins\\jip_nvse.ini");
-	if (lines <= 0)
-		for (UInt32 index : {1, 4, 5, 6, 7, 8, 9, 13, 14})
-			SetOptionalPatch(index, true);
-	else while (lines > 0)
-	{
-		char *delim = GetNextToken(buffer, '=');
-		if (UInt32 index = s_optionalHacks->Get(buffer))
-			if (index >= 20)
-			{
-				UInt32 value = StrToInt(delim);
-				switch (index)
+	if (EnsureIniWithDefaults()) {
+		SInt32 lines = GetPrivateProfileSection("GamePatches", buffer, 0x10000, "Data\\NVSE\\plugins\\jip_nvse.ini");
+		if (lines <= 0)
+			for (UInt32 index : {1, 4, 5, 6, 7, 8, 9, 13, 14})
+				SetOptionalPatch(index, true);
+		else while (lines > 0)
+		{
+			char* delim = GetNextToken(buffer, '=');
+			if (UInt32 index = s_optionalHacks->Get(buffer))
+				if (index >= 20)
 				{
-				case 20:
-					s_uWMChancePerLevel = value;
-					break;
-				case 21:
-					s_uWMChanceMin = value;
-					break;
-				case 22:
-					s_uWMChanceMax = value;
-					break;
+					UInt32 value = StrToInt(delim);
+					switch (index)
+					{
+					case 20:
+						s_uWMChancePerLevel = value;
+						break;
+					case 21:
+						s_uWMChanceMin = value;
+						break;
+					case 22:
+						s_uWMChanceMax = value;
+						break;
+					}
 				}
-			}
-			else if (*delim != '0')
-			{
-				if ((index == 18) && (*delim == '2'))
-					s_NPCPerksAutoAdd = true;
-				if ((index == 3) || (index >= 15))
-					s_deferrSetOptional |= 1 << index;
-				else SetOptionalPatch(index, true);
-			}
-		SInt32 size = StrLen(buffer) + 1;
-		buffer += size;
-		lines -= size;
+				else if (*delim != '0')
+				{
+					if ((index == 18) && (*delim == '2'))
+						s_NPCPerksAutoAdd = true;
+					if ((index == 3) || (index >= 15))
+						s_deferrSetOptional |= 1 << index;
+					else SetOptionalPatch(index, true);
+				}
+			SInt32 size = StrLen(buffer) + 1;
+			buffer += size;
+			lines -= size;
+		}
 	}
 
 	//	Fix Enhanced Camera ground sinking bug when switching to 3rd person

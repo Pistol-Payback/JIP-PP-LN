@@ -22,6 +22,9 @@
     <Filter Include="pUtilities\Nif">
       <UniqueIdentifier>{7f35b01d-4448-4fc7-a9e7-e350d5df68b8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="startup">
+      <UniqueIdentifier>{6208441a-cb9f-49f3-b3a0-0ab5e73d178c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="jip_nvse.cpp" />
@@ -431,6 +434,12 @@
     </ClInclude>
     <ClInclude Include="p_plus\pBitMask.hpp">
       <Filter>pUtilities</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\pSmallBuffer.hpp">
+      <Filter>pUtilities</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\GamePatchesINI.hpp">
+      <Filter>startup</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

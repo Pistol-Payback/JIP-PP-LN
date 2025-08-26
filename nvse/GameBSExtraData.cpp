@@ -64,6 +64,30 @@ __declspec(naked) BSExtraData *BaseExtraList::GetByType(UInt32 xType) const
 	}
 }
 
+//We aren't ready to replace the asm version yet.
+BSExtraData* BaseExtraList::GetByType_p(UInt32 extraType) const
+{
+	// Fast-fail if the list is empty.
+	if (!this || !this->m_data)
+		return nullptr;
+
+	const UInt32 chunkIndex = (extraType >> 5);
+	const UInt32 bitMask = (1u << (extraType & 31));
+	if ((this->m_presenceBitfield[chunkIndex] & bitMask) == 0)
+		return nullptr;
+
+	// Lock while walking the list (LightCS::Enter/Leave via ScopedLightCS)
+	XDATA_CS;
+
+	BSExtraData* current = this->m_data;
+	while (current && current->type != extraType) {
+		current = current->next;
+	}
+
+	return current; // nullptr if not found
+
+}
+
 __declspec(naked) ExtraDataList *ExtraDataList::Create()
 {
 	__asm

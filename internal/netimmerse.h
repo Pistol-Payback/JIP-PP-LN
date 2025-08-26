@@ -1,65 +1,6 @@
 ﻿#pragma once
 #include "p_plus/NiFixedString.hpp"
 
-//const char* __cdecl GetNiFixedString(const char *inStr);
-
-/*
-class NiFixedString
-{
-	const char		*str;
-
-	UInt32 *Meta() const {return (UInt32*)(str - 8);}
-
-	void Set(const char *inStr)
-	{
-		str = inStr;
-		if (str) InterlockedIncrement(Meta());
-	}
-
-	void Unset()
-	{
-		if (str)
-		{
-			InterlockedDecrement(Meta());
-			str = nullptr;
-		}
-	}
-
-public:
-	NiFixedString() : str(nullptr) {}
-	NiFixedString(const char *inStr) : str(GetNiFixedString(inStr))	{}
-	NiFixedString(const NiFixedString &inStr) {Set(inStr.str);}
-	~NiFixedString() {Unset();}
-
-	const char *Get() const {return str ? str : "NULL";}
-	const char* CStr() const { return str ? str : "NULL"; }
-
-	UInt32 Length() const {return str ? Meta()[1] : 0;}
-
-	explicit operator bool() const {return str != nullptr;}
-
-	operator const char*() const {return str;}
-
-	const char* operator*() const {return str;}
-
-	inline void operator=(const char *inStr)
-	{
-		Unset();
-		str = GetNiFixedString(inStr);
-	}
-	inline void operator=(const NiFixedString &inStr)
-	{
-		if (str != inStr.str)
-			Set(inStr.str);
-	}
-
-	inline bool operator==(const NiFixedString &rhs) const {return str == rhs.str;}
-	inline bool operator<(const NiFixedString &rhs) const {return str < rhs.str;}
-
-	UInt32 RefCount() const {return str ? Meta()[0] : 0;}
-};
-*/
-
 // forward‐declare our real implementation
 void __fastcall InitPointLights_Impl(NiNode* rootNode, NiNode* sentinel);
 extern TempObject<NiFixedString> s_LIGH_EDID;
@@ -1813,20 +1754,21 @@ public:
 
 	void DownwardsInitPointLights(NiNode* root);
 	void AddSuffixToAllChildren(const char* suffix);
-	void removeRuntimeNode(const NiRuntimeNode& toRemove);
-	void removeAllRuntimeNodes(const NiRuntimeNodeVector* runtimeNodes);
-	void attachRuntimeNodes(const NiRuntimeNodeVector* runtimeNodes);
-	void attachRuntimeRef(const NiRuntimeNode& toAttach);
-	void attachRuntimeModel(const NiRuntimeNode& toAttach);
-	void attachRuntimeNode(const NiRuntimeNode& toAttach);
 
-	void refreshRuntimeNodes(const NiRuntimeNodeVector* refRuntimeNodes, const NiRuntimeNodeVector* baseFormRuntimeNodes) {
+	void removeRuntimeNode(const NiRuntimeNode& toRemove);
+	void updateCache(NiRuntimeNodeVector* runtimeNodesVector);
+	void removeAllRuntimeNodes(NiRuntimeNodeVector* runtimeNodesVector);
+	void attachAllRuntimeNodes(NiRuntimeNodeVector* runtimeNodesVector);
+
+	void refreshRuntimeNodes(NiRuntimeNodeVector* refRuntimeNodes, NiRuntimeNodeVector* baseFormRuntimeNodes) {
 
 		removeAllRuntimeNodes(refRuntimeNodes);
 		removeAllRuntimeNodes(baseFormRuntimeNodes);
 
-		attachRuntimeNodes(baseFormRuntimeNodes);
-		attachRuntimeNodes(refRuntimeNodes);
+		attachAllRuntimeNodes(baseFormRuntimeNodes);
+		attachAllRuntimeNodes(refRuntimeNodes);
+
+		this->UpdateTransformAndBounds(kNiUpdateData);
 
 	}
 

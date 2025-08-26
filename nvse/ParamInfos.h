@@ -60,6 +60,29 @@ constexpr ParamInfo kParams_OneObjectID_OneInt[] =
 	{kParamType_Integer}
 };
 
+#define OPTIONAL_FORMAT_STRING_PARAMS 	\
+	{kParamType_String, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1}, \
+	{kParamType_Float, 1} 
+
 #define FORMAT_STRING_PARAMS 	\
 	{kParamType_String}, \
 	{kParamType_Float, 1}, \
@@ -1014,6 +1037,13 @@ constexpr ParamInfo kParams_TwoForms_OneInt[] =
 	{kParamType_Integer}
 };
 
+constexpr ParamInfo kParams_TwoForms_OneOptionalInt[] =
+{
+	{kParamType_AnyForm},
+	{kParamType_AnyForm},
+	{kParamType_Integer, 1}
+};
+
 constexpr ParamInfo kParams_FormCondition[] =
 {
 	{kParamType_AnyForm},
@@ -1145,6 +1175,13 @@ constexpr ParamInfo kParams_OneForm_OneString_OneInt[] =
 	{kParamType_AnyForm},
 	{kParamType_String},
 	{kParamType_Integer}
+};
+
+constexpr ParamInfo kParams_OneForm_OneString_OneOptionalBasicType[] =
+{
+	{kParamType_AnyForm},
+	{kParamType_String},
+	{kNVSEParamType_BasicType, 1}
 };
 
 constexpr ParamInfo kParams_OneMagicItem[] =
@@ -1474,6 +1511,14 @@ constexpr ParamInfo kParams_OneForm_OneInt_OneFormatString[] =
 	{kParamType_AnyForm},
 	{kParamType_Integer},
 	FORMAT_STRING_PARAMS
+};
+
+constexpr ParamInfo kParams_TwoForms_OneInt_OneFormatString[] =
+{
+	{kParamType_AnyForm},
+	{kParamType_AnyForm},
+	{kParamType_Integer},
+	OPTIONAL_FORMAT_STRING_PARAMS
 };
 
 constexpr ParamInfo kParams_OneOptionalObjectRef_OneOptionalInt_OneOptionalFloat_OneOptionalString[] =

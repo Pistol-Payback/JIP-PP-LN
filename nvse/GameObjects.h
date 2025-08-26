@@ -190,6 +190,9 @@ public:
 	}
 
 	NiAVObject* findNodeByName(GetRootNodeMask pcNode, const char* blockName);
+	NiAVObject* findNodeByNameTest(GetRootNodeMask pcNode, const char* blockName);
+
+	NiNode* getRootNode() { return renderState ? renderState->rootNode : nullptr; };
 
 };
 static_assert(sizeof(TESObjectREFR) == 0x068);
@@ -798,6 +801,15 @@ public:
 	int GetGroundMaterial() const;
 	void RefreshAnimData();
 	double GetPathingDistance(TESObjectREFR *target);
+
+	void RefreshInventoryWeight(TESObjectREFR* thisObj)
+	{
+		if (auto xChanges = GetExtraType(&thisObj->extraDataList, ExtraContainerChanges); xChanges && xChanges->data)
+		{
+			xChanges->data->totalWgCurrent = xChanges->data->pGetInventoryWeight(false);
+		}
+	}
+
 };
 
 extern float s_moveAwayDistance;
@@ -1126,6 +1138,9 @@ public:
 	int GetDetectionState();
 
 	void ToggleSneak(bool toggle);
+
+	__forceinline static GetRootNodeMask::eGetRootNode getCameraState() { return GetSingleton()->is3rdPerson ? GetRootNodeMask::kThirdPerson : GetRootNodeMask::kFirstPerson; };
+
 };
 static_assert(sizeof(PlayerCharacter) == 0xE50);
 

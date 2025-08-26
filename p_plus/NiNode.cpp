@@ -38,17 +38,60 @@ void NiNode::DownwardsInitPointLights(NiNode* root)
 
 }
 
+void NiNode::updateCache(NiRuntimeNodeVector* runtimeNodesVector) {
+	if (runtimeNodesVector) {
+		runtimeNodesVector->updateCache(this);
+	}
+}
+
+void NiNode::removeAllRuntimeNodes(NiRuntimeNodeVector* runtimeNodesVector) {
+	if (runtimeNodesVector) {
+		runtimeNodesVector->removeAllRuntimeNodes(this);
+	}
+}
+
+void NiNode::attachAllRuntimeNodes(NiRuntimeNodeVector* runtimeNodesVector) {
+	if (runtimeNodesVector && runtimeNodesVector->attachAllRuntimeNodes(this) == false) {
+		//runtimeNodesVector->purgeUncachedNodes();
+	}
+}
+
 void NiNode::removeRuntimeNode(const NiRuntimeNode& toRemove) {
 
-	//We grab the back of the path, because the player model is always changing. Ran into issues where the stored path is different to the current path.
-	//Quick fix is to just check for the parent node when removing.
-	NiAVObject* obj = this->DeepSearchBySparsePath(NiBlockPathBase(toRemove.path.back(), toRemove.node)); 
+	NiAVObject* obj = nullptr;
+	bool sparePathUsed = false;
+	if (toRemove.isValid() == false) { //No cached path
+
+		if (toRemove.node.isValid()) {
+			obj = DeepSearchBySparsePath(NiBlockPathBase(toRemove.sparsePath, toRemove.node));
+			sparePathUsed = true;
+		}
+
+	}
+	else {
+
+		obj = DeepSearchByPath(NiBlockPathBase(toRemove.cachedPath, toRemove.node));
+		if (!obj || obj->m_blockName != toRemove.node) { //Didin't find full path
+			obj = DeepSearchBySparsePath(NiBlockPathBase(toRemove.sparsePath, toRemove.node));
+			sparePathUsed = true;
+		}
+
+	}
+
 	if (obj) {
 
 		if (toRemove.value.isLink()) { //Is a ^parent inserted node
 
-			NiNode* insertedParent = static_cast<NiNode*>(obj);
 			const NiFixedString* childName = &toRemove.value.getLink().childObj;
+			NiNode* insertedParent = nullptr;
+
+			//if (obj->m_blockName == *childName) { //if sparse path was used
+			if (sparePathUsed) { //Safer
+				insertedParent = static_cast<NiNode*>(obj->m_parent);		
+			}
+			else {
+				insertedParent = static_cast<NiNode*>(obj);
+			}
 
 			NiBlockPathBuilder builder;
 			NiAVObject* originalChild = insertedParent->BuildNiPath(NiBlockPathView(childName, 1), builder);
@@ -65,154 +108,14 @@ void NiNode::removeRuntimeNode(const NiRuntimeNode& toRemove) {
 				NiNode* child = const_cast<NiNode*>(builder.parents[0].node);
 
 				grandParent->AddObject(child, true); //Orphans insertedParent
-				grandParent->UpdateTransformAndBounds(kNiUpdateData);
-
+				//grandParent->UpdateTransformAndBounds(kNiUpdateData);
 
 		}
 		else {
 			auto parent = obj->m_parent;
 			parent->RemoveObject(obj);
-			parent->UpdateTransformAndBounds(kNiUpdateData);
+			//parent->UpdateTransformAndBounds(kNiUpdateData);
 		}
-
-
-	}
-}
-
-void NiNode::removeAllRuntimeNodes(const NiRuntimeNodeVector* runtimeNodes) {
-	if (runtimeNodes) {
-		for (const NiRuntimeNode* entry : runtimeNodes->allPaths) {
-			this->removeRuntimeNode(*entry);
-		}
-	}
-}
-
-void NiNode::attachRuntimeNodes(const NiRuntimeNodeVector* runtimeNodes) {
-
-	//Attachments should already be in order
-	if (runtimeNodes) {
-		for (const NiRuntimeNode* entry : runtimeNodes->allPaths) {
-			if (entry->value.isModel()) {
-				this->attachRuntimeModel(*entry);
-			}
-			else if (entry->value.isRefID()) {
-				//attachRuntimeRef(*entry);
-			}
-			else {
-				attachRuntimeNode(*entry);
-			}
-
-		}
-
-	}
-
-}
-
-void NiNode::attachRuntimeRef(const NiRuntimeNode& toAttach) {
-
-	NiNode* node = (NiNode*)DeepSearchByPath(toAttach.path); //Check if it has the node already
-	if (!node) {
-		return;
-	}
-	/*
-	const RefModel& refModel = toAttach.value.getRefModel();
-	if (TESForm* form = LookupFormByRefID(refModel.refID)) {
-
-		if (form->typeID == kFormType_TESObjectLIGH) {
-			//Do light attach
-		}
-
-		NiNode* childModel = LoadModelCopy(form->GetModelPath());
-
-		if (node->isNiNode() && childModel) {
-
-			childModel->AddSuffixToAllChildren(refModel.suffix.getPtr());
-			node->AddObject(childModel, true);
-			node->UpdateTransformAndBounds(kNiUpdateData);
-
-		}
-
-	}
-	*/
-}
-
-//Attaching node from attachRuntimeNodes
-void NiNode::attachRuntimeModel(const NiRuntimeNode& toAttach) {
-
-	const ModelPath& modelPath = toAttach.value.getModelPath();
-	if (!modelPathExists(modelPath.path.CStr())) {
-		return;
-	}
-
-	NiNode* node = (NiNode*)DeepSearchByPath(toAttach.path);
-
-	if (node->m_blockName != toAttach.path.back()) { //Didin't find full path
-		node = (NiNode*)DeepSearchBySparsePath(NiBlockPathView{ &toAttach.path.back(), 1 });
-	}
-
-	if (!node || !node->isNiNode()) {
-		return;
-	}
-
-	ModelTemp tempModel = ModelTemp(modelPath.path.getPtr());
-
-	if (!tempModel.clonedNode) {
-		return; //Model failed to load
-	}
-
-	if (!node->hasChildNode(tempModel.clonedNode->m_blockName)) {
-
-		NiNode* toAttach = tempModel.detachNode();
-
-		toAttach->RemoveCollision(); //Prevents invalid collision
-		toAttach->AddSuffixToAllChildren(modelPath.suffix.getPtr());
-		toAttach->DownwardsInitPointLights(this);
-		toAttach->AddPointLights();
-
-		node->AddObject(toAttach, true);
-		node->UpdateTransformAndBounds(kNiUpdateData);
-
-	}
-
-}
-
-void NiNode::attachRuntimeNode(const NiRuntimeNode& toAttach) {
-
-	NiNode* node = (NiNode*)DeepSearchByPath(toAttach.path);
-	if (node->m_blockName != toAttach.path.back()) { //Didin't find full path
-		node = (NiNode*)DeepSearchBySparsePath(NiBlockPathView{ &toAttach.path.back(), 1 });
-	}
-
-	if (!node || !node->isNiNode() || node->hasChildNode(toAttach.node)) {
-		return;
-	}
-
-	if (toAttach.value.isLink()) { //Is a ^parent inserted node
-
-		NiNode* grandparent = node;
-		const NiFixedString* child = &toAttach.value.getLink().childObj;
-		node = (NiNode*)grandparent->DeepSearchBySparsePath(NiBlockPathView(child, 1));
-
-		if (!node) {
-			return;
-		}
-
-		NiNode* newParent = NiNode::pCreate(toAttach.node);
-		newParent->AddObject(node, true);
-		grandparent->AddObject(newParent, true);
-		//newParent->UpdateTransformAndBounds(kNiUpdateData);
-		grandparent->UpdateTransformAndBounds(kNiUpdateData);
-
-		newParent->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
-
-	}
-	else {
-
-		NiNode* newNode = NiNode::pCreate(toAttach.node);
-		node->AddObject(newNode, true);
-		node->UpdateTransformAndBounds(kNiUpdateData);
-
-		newNode->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
 
 	}
 
@@ -394,6 +297,10 @@ NiAVObject* NiNode::BuildNiPath(const NiBlockPathView& blockPath, NiBlockPathBui
 	UInt16 seg0 = (this->m_blockName == blockPath[0]) ? 1u : 0u;
 	output.enterChildNode(this, seg0);
 
+	// early out if we already have no segments left
+	if (seg0 >= blockPath.size())
+		return this;
+
 	return BuildNiPathIter(blockPath, output);
 
 }
@@ -449,41 +356,46 @@ NiAVObject* NiNode::BuildNiPathIter(const NiBlockPathView& path, NiBlockPathBuil
 NiAVObject* TESObjectREFR::findNodeByName(GetRootNodeMask which, const char* blockName)
 {
 
-	// Prebuild the path once
-	NiBlockPathBase path(blockName);
-
-	auto searchAt = [&](NiNode* root) -> NiAVObject* {
+	auto search = [&](NiNode* root) -> NiAVObject* {
 		if (!root) return root;
-		if (!blockName || !*blockName)
+		if (!blockName || blockName[0] == '\0')
 			return root;
 		return root->DeepSearchBySparsePath(NiBlockPathBase(blockName));
 		};
 
-	if (IsPlayer() && which.has(GetRootNodeMask::kBoth) == false) {
-
-		// then 1st‑person
-		if (which.has(GetRootNodeMask::kFirstPerson)) {
-			auto* firstPers = static_cast<PlayerCharacter*>(this)->node1stPerson;
-			if (auto found = searchAt(firstPers))
-				return found;
-		}
-
+	if (IsPlayer()) {
+		// 3rd-person
 		if (which.has(GetRootNodeMask::kThirdPerson)) {
-			if (auto found = searchAt(renderState ? renderState->rootNode : nullptr))
-				return found;
-		}
+			if (auto* root3 = renderState ? renderState->rootNode : nullptr) {
+				if (auto* found = search(root3)) {
+					if (which.has(GetRootNodeMask::kFirstPerson) == false) {
+						return found;
+					}
+				}
 
+			}
+		}
+		// 1st-person
+		if (which.has(GetRootNodeMask::kFirstPerson)) {
+			if (auto* root1 = static_cast<PlayerCharacter*>(this)->node1stPerson) {
+				if (auto* found = search(root1)) {
+					return found;
+				}
+			}
+		}
+		// nothing matched
+		return nullptr;
 	}
 
-	// search the “normal” root, if the player is passed it will retun the root of the current camera state
-	return searchAt(GetNiNode());
+	// non-player
+	return search(getRootNode());
 }
 
 //From Plugins+
 NiAVObject* NiNode::DeepSearchBySparsePath(const NiBlockPathView& blockPath)
 {
-	if (blockPath.size() == 0)
-		return nullptr;
+	//if (blockPath.size() == 0)
+		//return nullptr;
 	// same logic as above
 	NiBlockPathBuilder builder;
 	return BuildNiPath(blockPath, builder);
@@ -512,6 +424,11 @@ NiAVObject* NiNode::DeepSearchByPath(const NiBlockPathView& blockPath)
 		return nullptr;
 	// same logic as above
 	uint32_t startIdx = (this->m_blockName == blockPath[0]) ? 1 : 0;
+
+	// early out if we already have no segments left
+	if (startIdx >= blockPath.size())
+		return this;
+
 	return DeepSearchByPathIter(blockPath, startIdx);
 }
 
@@ -524,10 +441,6 @@ NiAVObject* NiNode::DeepSearchByPathIter(const NiBlockPathView& blockPath, uint3
 		uint32_t       segIdx;   // which path segment we’re matching
 		UInt16         childIdx; // next child to try
 	};
-
-	// early out if we already have no segments left
-	if (startIdx >= blockPath.size())
-		return this;
 
 	std::vector<Frame> stack;
 	stack.reserve(blockPath.size());

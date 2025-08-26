@@ -792,25 +792,25 @@ struct ExpressionEvaluatorUtils
 	void					(__fastcall *DestroyExpressionEvaluator)(void *expEval);
 	bool					(__fastcall *ExtractArgsEval)(void *expEval);
 	UInt8					(__fastcall *GetNumArgs)(void *expEval);
-	PluginScriptToken*		(__fastcall *GetNthArg)(void *expEval, UInt32 argIdx);
+	PluginScriptToken*		(__fastcall *GetNthArg)(const void *expEval, UInt32 argIdx);
 
-	UInt8					(__fastcall *ScriptTokenGetType)(PluginScriptToken *scrToken);
-	double					(__fastcall *ScriptTokenGetFloat)(PluginScriptToken *scrToken);
-	bool					(__fastcall *ScriptTokenGetBool)(PluginScriptToken *scrToken);
-	UInt32					(__fastcall *ScriptTokenGetFormID)(PluginScriptToken *scrToken);
-	TESForm*				(__fastcall *ScriptTokenGetTESForm)(PluginScriptToken *scrToken);
-	const char*				(__fastcall *ScriptTokenGetString)(PluginScriptToken *scrToken);
-	NVSEArrayVar*			(__fastcall *ScriptTokenGetArray)(PluginScriptToken *scrToken);
-	UInt32					(__fastcall *ScriptTokenGetActorValue)(PluginScriptToken *scrToken);
-	ScriptVar*				(__fastcall *ScriptTokenGetScriptVar)(PluginScriptToken *scrToken);
-	const PluginTokenPair*	(__fastcall *ScriptTokenGetPair)(PluginScriptToken *scrToken);
-	const PluginTokenSlice*	(__fastcall *ScriptTokenGetSlice)(PluginScriptToken *scrToken);
-	UInt32					(__fastcall *ScriptTokenGetAnimGroup)(PluginScriptToken *scrToken);
+	UInt8					(__fastcall *ScriptTokenGetType)(const PluginScriptToken *scrToken);
+	double					(__fastcall *ScriptTokenGetFloat)(const PluginScriptToken *scrToken);
+	bool					(__fastcall *ScriptTokenGetBool)(const PluginScriptToken *scrToken);
+	UInt32					(__fastcall *ScriptTokenGetFormID)(const PluginScriptToken *scrToken);
+	TESForm*				(__fastcall *ScriptTokenGetTESForm)(const PluginScriptToken *scrToken);
+	const char*				(__fastcall *ScriptTokenGetString)(const PluginScriptToken *scrToken);
+	NVSEArrayVar*			(__fastcall *ScriptTokenGetArray)(const PluginScriptToken *scrToken);
+	UInt32					(__fastcall *ScriptTokenGetActorValue)(const PluginScriptToken *scrToken);
+	ScriptVar*				(__fastcall *ScriptTokenGetScriptVar)(const PluginScriptToken *scrToken);
+	const PluginTokenPair*	(__fastcall *ScriptTokenGetPair)(const PluginScriptToken *scrToken);
+	const PluginTokenSlice*	(__fastcall *ScriptTokenGetSlice)(const PluginScriptToken *scrToken);
+	UInt32					(__fastcall *ScriptTokenGetAnimGroup)(const PluginScriptToken *scrToken);
 
 	void					(__fastcall *SetExpectedReturnType)(void *expEval, UInt8 retnType);
 	void					(__fastcall *AssignCommandResultFromElement)(void *expEval, NVSEArrayElement &result);
-	void					(__fastcall *ScriptTokenGetElement)(PluginScriptToken *scrToken, ArrayElementR &outElem);
-	bool					(__fastcall *ScriptTokenCanConvertTo)(PluginScriptToken *scrToken, UInt8 toType);
+	void					(__fastcall *ScriptTokenGetElement)(const PluginScriptToken *scrToken, ArrayElementR &outElem);
+	bool					(__fastcall *ScriptTokenCanConvertTo)(const PluginScriptToken *scrToken, UInt8 toType);
 
 	bool					(__fastcall *ExtractArgsVA)(void *expEval, va_list list);
 
@@ -849,12 +849,12 @@ public:
 		return s_expEvalUtils.GetNumArgs(expEval);
 	}
 
-	PluginScriptToken *GetNthArg(UInt32 argIdx)
+	PluginScriptToken *GetNthArg(UInt32 argIdx) const
 	{
 		return s_expEvalUtils.GetNthArg(expEval, argIdx);
 	}
 
-	void SetExpectedReturnType(UInt8 retnType)
+	void SetExpectedReturnType(UInt8 retnType) noexcept
 	{
 		s_expEvalUtils.SetExpectedReturnType(expEval, retnType);
 	}
@@ -874,89 +874,203 @@ public:
 		va_end(list);
 		return result;
 	}
+
 };
 
 struct PluginScriptToken
 {
-	UInt8 GetType()
+	UInt8 GetType() const
 	{
 		return s_expEvalUtils.ScriptTokenGetType(this);
 	}
 
-	bool CanConvertTo(UInt8 toType)
+	bool CanConvertTo(UInt8 toType) const
 	{
 		return s_expEvalUtils.ScriptTokenCanConvertTo(this, toType);
 	}
 
-	double GetFloat()
+	double GetFloat() const
 	{
 		return s_expEvalUtils.ScriptTokenGetFloat(this);
 	}
 
-	int GetInt()
+	int GetInt() const
 	{
 		return int(s_expEvalUtils.ScriptTokenGetFloat(this));
 	}
 
-	UInt32 GetUInt()
+	UInt32 GetUInt() const
 	{
 		return cvtd2ul(s_expEvalUtils.ScriptTokenGetFloat(this));
 	}
 
-	bool GetBool()
+	bool GetBool() const
 	{
 		return s_expEvalUtils.ScriptTokenGetBool(this);
 	}
 
-	UInt32 GetFormID()
+	UInt32 GetFormID() const
 	{
 		return s_expEvalUtils.ScriptTokenGetFormID(this);
 	}
 
-	TESForm *GetTESForm()
+	TESForm *GetTESForm() const
 	{
 		return s_expEvalUtils.ScriptTokenGetTESForm(this);
 	}
 
-	const char *GetString()
+	const char *GetString() const
 	{
 		return s_expEvalUtils.ScriptTokenGetString(this);
 	}
 
-	NVSEArrayVar *GetArrayVar()
+	NVSEArrayVar *GetArrayVar() const
 	{
 		return s_expEvalUtils.ScriptTokenGetArray(this);
 	}
 
-	UInt32 GetActorValue()
+	UInt32 GetActorValue() const
 	{
 		return s_expEvalUtils.ScriptTokenGetActorValue(this);
 	}
 
-	UInt32 GetAnimGroup()
+	UInt32 GetAnimGroup() const
 	{
 		return s_expEvalUtils.ScriptTokenGetAnimGroup(this);
 	}
 
-	ScriptVar *GetScriptVar()
+	ScriptVar *GetScriptVar() const
 	{
 		return s_expEvalUtils.ScriptTokenGetScriptVar(this);
 	}
 
-	const PluginTokenPair *GetPair()
+	const PluginTokenPair *GetPair() const
 	{
 		return s_expEvalUtils.ScriptTokenGetPair(this);
 	}
 
-	const PluginTokenSlice *GetSlice()
+	const PluginTokenSlice *GetSlice() const
 	{
 		return s_expEvalUtils.ScriptTokenGetSlice(this);
 	}
 
-	void GetElement(ArrayElementR &outElem)
+	void GetElement(ArrayElementR &outElem) const
 	{
 		s_expEvalUtils.ScriptTokenGetElement(this, outElem);
 	}
+
+	const char* TypeName() const noexcept
+	{
+		switch (GetType()) {
+		case kTokenType_Number:            return "Number";
+		case kTokenType_Boolean:           return "Boolean";
+		case kTokenType_String:            return "String";
+		case kTokenType_Form:              return "Form";
+		case kTokenType_Ref:               return "Ref";
+		case kTokenType_Global:            return "Global";
+		case kTokenType_Array:             return "Array";
+		case kTokenType_ArrayElement:      return "ArrayElement";
+		case kTokenType_Slice:             return "Slice";
+		case kTokenType_Command:           return "Command";
+		case kTokenType_Variable:          return "Variable";
+		case kTokenType_NumericVar:        return "NumericVar";
+		case kTokenType_RefVar:            return "RefVar";
+		case kTokenType_StringVar:         return "StringVar";
+		case kTokenType_ArrayVar:          return "ArrayVar";
+		case kTokenType_Ambiguous:         return "Ambiguous";
+		case kTokenType_Operator:          return "Operator";
+		case kTokenType_ForEachContext:    return "ForEachContext";
+		case kTokenType_Byte:              return "Byte";
+		case kTokenType_Short:             return "Short";
+		case kTokenType_Int:               return "Int";
+		case kTokenType_Pair:              return "Pair";
+		case kTokenType_AssignableString:  return "AssignableString";
+		case kTokenType_Lambda:            return "Lambda";
+		case kTokenType_Invalid:           return "Invalid";
+		case kTokenType_Empty:             return "Empty";
+		default:                           return "Unknown";
+		}
+	}
+
+	bool IsNumericLike() const noexcept
+	{
+		switch (GetType()) {
+		case kTokenType_Number:
+		case kTokenType_NumericVar:
+		case kTokenType_Byte:
+		case kTokenType_Short:
+		case kTokenType_Int:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	bool IsFormLike() const noexcept
+	{
+		switch (GetType()) {
+		case kTokenType_Form:
+		case kTokenType_Ref:
+		case kTokenType_RefVar:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	bool IsStringLike() const noexcept
+	{
+		switch (GetType()) {
+		case kTokenType_String:
+		case kTokenType_StringVar:
+		case kTokenType_AssignableString:
+			return true;
+		default:
+			return CanConvertTo(kTokenType_String);
+		}
+	}
+
+	// ---- NEW: safe getters (return false on mismatch) ----
+	bool TryGetUInt(UInt32& out) const noexcept
+	{
+		if (IsNumericLike() || CanConvertTo(kTokenType_Number)) {
+			out = GetUInt(); return true;
+		}
+		return false;
+	}
+
+	bool TryGetFloat(double& out) const noexcept
+	{
+		if (IsNumericLike() || CanConvertTo(kTokenType_Number)) {
+			out = GetFloat(); return true;
+		}
+		return false;
+	}
+
+	bool TryGetBool(bool& out) const noexcept
+	{
+		if (GetType() == kTokenType_Boolean || CanConvertTo(kTokenType_Boolean)) {
+			out = GetBool(); return true;
+		}
+		return false;
+	}
+
+	bool TryGetTESForm(TESForm*& out) const noexcept
+	{
+		if (IsFormLike() || CanConvertTo(kTokenType_Form)) {
+			out = GetTESForm(); return out != nullptr;
+		}
+		return false;
+	}
+
+	bool TryGetString(const char*& out) const noexcept
+	{
+		if (IsStringLike()) {
+			out = GetString(); return out && *out;
+		}
+		return false;
+	}
+
 };
 
 struct PluginTokenPair

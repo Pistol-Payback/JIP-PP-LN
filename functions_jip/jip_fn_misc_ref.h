@@ -105,6 +105,15 @@ DEFINE_COMMAND_PLUGIN_EXP(GetRefExtraData, 1, kParams_NVSE_OneNum_OneOptionalNum
 DEFINE_COMMAND_PLUGIN_EXP(SetRefExtraData, 1, kParams_NVSE_OneOptionalNum_OneOptionalBasicType);
 DEFINE_COMMAND_ALT_PLUGIN(TogglePurgeOnUnload, TPOU, 1, kParams_OneOptionalInt);
 
+DEFINE_COMMAND_PLUGIN(AttachFormModel, false, kParams_TwoForms_OneInt_OneFormatString);
+DEFINE_COMMAND_PLUGIN(GetRuntimeNodes, false, kParams_OneForm);
+DEFINE_COMMAND_PLUGIN_EXP(HasRuntimeNode, false, kParams_OneForm_OneString_OneOptionalBasicType);
+DEFINE_COMMAND_PLUGIN_EXP(CopyRuntimeNodes, false, kParams_TwoForms_OneOptionalInt);
+DEFINE_COMMAND_PLUGIN_EXP(EraseRuntimeNode, false, kParams_OneForm_OneOptionalInt);
+
+
+//DEFINE_CMD_COND_PLUGIN(ModelHasBlockCOND, 1, kParams_OneForm_OneString);
+
 bool Cmd_SetPersistent_Execute(COMMAND_ARGS)
 {
 	UInt32 doSet;
@@ -1031,7 +1040,7 @@ bool Cmd_GetNifBlockTranslation_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	UInt32 getWorld = 0;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &getWorld, &playerNode))
 		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
@@ -1046,7 +1055,7 @@ bool Cmd_SetNifBlockTranslation_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	NiVector3 transltn;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	UInt32 transform = 0;
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &transltn.x, &transltn.y, &transltn.z, &playerNode, &transform) && blockName[0])
 
@@ -1080,7 +1089,7 @@ bool Cmd_GetNifBlockRotation_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	UInt32 getMode = 0;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &getMode, &playerNode))
 		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
@@ -1111,7 +1120,7 @@ bool Cmd_SetNifBlockRotation_Execute(COMMAND_ARGS)
 	char blockName[0x40];
 	NiVector3 rot;
 	UInt32 transform = 0;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &rot.x, &rot.y, &rot.z, &transform, &playerNode) && blockName[0])
 		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
@@ -1147,7 +1156,7 @@ bool Cmd_SetNifBlockRotation_Execute(COMMAND_ARGS)
 bool Cmd_GetNifBlockScale_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &playerNode))
 		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 			*result = niBlock->m_transformLocal.scale;
@@ -1158,7 +1167,7 @@ bool Cmd_SetNifBlockScale_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	float newScale;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &newScale, &playerNode) && blockName[0])
 		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
@@ -1174,7 +1183,8 @@ bool Cmd_GetNifBlockFlag_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	UInt32 flagID = 0;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+
+	GetRootNodeMask playerNode( PlayerCharacter::getCameraState() );
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &flagID, &playerNode) && (flagID <= 31))
 		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName); niBlock && (niBlock->m_flags & (1 << flagID)))
 			*result = 1;
@@ -1185,7 +1195,7 @@ bool Cmd_SetNifBlockFlag_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
 	UInt32 flagID, doSet = 0;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &flagID, &doSet, &playerNode) && (flagID <= 26))
 		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
@@ -1496,286 +1506,192 @@ bool Cmd_SetLinearVelocity_Execute(COMMAND_ARGS)
 }
 
 //Version 57.41
-#pragma pack(push,1)
+#pragma pack(push, 1)
 struct InsertObjectParams {
 
-	enum class InsertMode : UInt8 {
-		kRemove_Pending = 0,  // bit-pattern 00
-		kAttach_Pending = 1,  // bit-pattern 01
-		kRemove_Instant = 2,  // bit-pattern 10
-		kAttach_Instant = 3   // bit-pattern 11
+	// I think objects allocated with Pool_CAlloc need to be below 256 for some reason. Anything above and we get mem corruption.
+	static constexpr size_t kTotalBytes = 256;
+
+	enum class registerMode : UInt8 {
+		kInsertNode = 0,
+		kAttachModel = 1,
+		kAttachRef = 2,
 	};
 
-	TESForm*	form;       // bytes [0…3]
-	InsertMode	mode;   // byte  4  (mode & flags)
-	UInt8		hookFlag;   // byte  5
-	UInt16		reserved;   // bytes [6…7], unused
-	// from offset 8 on we store the “node|object” string
-	char       pathSpec[0x100 - 8];
+	enum class InsertMode : UInt8 {
+		kRemove_Pending = 0,  // 00
+		kAttach_Pending = 1,  // 01
+		kRemove_Instant = 2,  // 10
+		kAttach_Instant = 3   // 11
+	};
 
-	constexpr bool isAttach() {
-		return (static_cast<uint8_t>(mode) & 0x1) != 0;
-	}
-	constexpr bool isInstant() {
-		return (static_cast<uint8_t>(mode) & 0x2) != 0;
-	}
+	// ---- Header (everything before pathSpec) ----
+	struct Header {
+		TESForm* form;          // +0
+		TESForm* toAttachForm;  // +4
+		InsertMode   mode;          // +8
+		registerMode hookFlag;      // +9
+		UInt16       reserved;      // +10  => header size = 12 bytes (today)
+	} header;
+
+	// Make "12" derive from sizeof(Header)
+	static constexpr size_t kHeaderBytes = sizeof(Header);
+
+	// ---- Flexible tail buffer (size is kTotalBytes - sizeof(Header)) ----
+	//char pathSpec[kTotalBytes - kHeaderBytes];
+	char pathSpec[kTotalBytes];
+
+	// Accessors so call sites can keep using the same names
+	TESForm*&		form()			noexcept { return header.form; }
+	TESForm*		form()			const noexcept { return header.form; }
+	TESForm*&		toAttachForm()	noexcept { return header.toAttachForm; }
+	TESForm*		toAttachForm()	const noexcept { return header.toAttachForm; }
+	InsertMode&		mode()          noexcept { return header.mode; }
+	InsertMode		mode()			const noexcept { return header.mode; }
+	registerMode&	hookFlag()		noexcept { return header.hookFlag; }
+	registerMode	hookFlag()		const noexcept { return header.hookFlag; }
+
+	constexpr bool isAttach()		const noexcept { return (static_cast<UInt8>(header.mode) & 1u) != 0; }
+	constexpr bool isInstant()		const noexcept { return (static_cast<UInt8>(header.mode) & 2u) != 0; }
+
+	static constexpr size_t pathCapacity() noexcept { return sizeof(pathSpec); }
 
 };
 #pragma pack(pop)
 
 //Version 57.41
-bool __fastcall RegisterInsertObject_New(InsertObjectParams& inData) {
+bool __fastcall RegisterInsertObject_New(InsertObjectParams* inData) {
 
+	bool result = false;
 	// Determine if we have a reference, and bail out early if invalid
-	TESObjectREFR* refr = IS_REFERENCE(inData.form) ? static_cast<TESObjectREFR*>(inData.form) : nullptr;
-	NiNode* rootNode = refr ? refr->GetRefNiNode() : nullptr;
-	if (refr ? !rootNode : !inData.form->IsBoundObject())
-		return false;
+	TESObjectREFR* refr = IS_REFERENCE(inData->form()) ? static_cast<TESObjectREFR*>(inData->form()) : nullptr;
+
+	NiNode*		rootNode = nullptr;
+	ModelTemp	temp; // freed at scope end
+	bool		attach = inData->isAttach();
+
+	if (inData->isInstant()) {
+		if (refr) {
+			rootNode = refr->GetRefNiNode();
+		}
+		else if (attach) {
+
+			const char* const modelPath = inData->form()->GetModelPath();
+			if (!modelPath) return result;
+			if (!temp.load(modelPath)) return result;
+			rootNode = temp.clonedNode;
+			rootNode->attachAllRuntimeNodes(inData->form()->getRuntimeNodes());
+
+		}
+	}
+
+	bool modifyMap = true;
+	if (refr) {
+		if (refr->IsCreated() || kInventoryType[refr->baseForm->typeID]) {
+			if ((inData->mode() != InsertObjectParams::InsertMode::kAttach_Instant) || !rootNode) {
+				return result;
+			}
+			modifyMap = false; //dont insert into runtime nodes map, simply attach to the existing node
+		}
+	}
+	else if (!inData->form()->IsBoundObject()) { return result; }
+
 
 	// Use the reference itself as the form if present
-	TESForm* targetForm = refr ? refr : inData.form;
+	TESForm* targetForm = refr ? refr : inData->form();
+	const char* path = inData->pathSpec;
 
-	bool		attach = inData.isAttach();
-	auto		hook = inData.hookFlag;
-
-	const char* path = inData.pathSpec;
-
-	switch (hook) {
-	case kHookFormFlag6_InsertNode:
+	switch (inData->hookFlag()) {
+	case InsertObjectParams::registerMode::kInsertNode:
 		if (attach)
-			return FormRuntimeModelManager::getSingleton().RegisterNode(targetForm, path, rootNode);
+			result = FormRuntimeModelManager::getSingleton().RegisterNode(targetForm, path, rootNode, modifyMap);
 		else
-			return FormRuntimeModelManager::getSingleton().RemoveNode(targetForm, path, hook, rootNode);
+			result = FormRuntimeModelManager::getSingleton().RemoveNode(targetForm, path, rootNode);
 		break;
 
-	case kHookFormFlag6_AttachModel:
+	case InsertObjectParams::registerMode::kAttachModel:
 		if (attach)
-			return FormRuntimeModelManager::getSingleton().RegisterModel(targetForm, path, rootNode);
+			result = FormRuntimeModelManager::getSingleton().RegisterModel(targetForm, path, rootNode, modifyMap);
 		else
-			return FormRuntimeModelManager::getSingleton().RemoveModel(targetForm, path, hook, rootNode);
+			result = FormRuntimeModelManager::getSingleton().RemoveModel(targetForm, path, rootNode);
 		break;
-
-	default:
-		return false;
+	case InsertObjectParams::registerMode::kAttachRef:
+		if (attach)
+			result = FormRuntimeModelManager::getSingleton().RegisterRefModel(targetForm, inData->toAttachForm(), path, rootNode, modifyMap);
+		else
+			result = FormRuntimeModelManager::getSingleton().RemoveRefModel(targetForm, inData->toAttachForm(), path, rootNode);
+		break;
 	}
 
-	return true;
+	delete inData;
+
+	return result;
+
 }
-
-bool __fastcall RegisterInsertObject_Old(char *inData)
-{
-	static char meshesPath[0x100] = "data\\meshes\\";
-	ScopedString<0x100> scopedStr(inData);
-	TESForm *form = *(TESForm**)inData;
-	TESObjectREFR *refr = IS_REFERENCE(form) ? (TESObjectREFR*)form : nullptr;
-	NiNode *rootNode = refr ? refr->GetRefNiNode() : nullptr;
-	bool modifyMap = true;
-	char doInsert = inData[4];
-	if (refr)
-	{
-		if (refr->IsCreated() || kInventoryType[refr->baseForm->typeID])
-		{
-			if ((doInsert != 3) || !rootNode)
-				return false;
-			modifyMap = false;
-		}
-	}
-	else if (!form->IsBoundObject())
-		return false;
-
-	char *pInData = inData + 8, *nodeName = nullptr, *objectName = FindChr(pInData, '|'), *suffix;
-	if (objectName)
-	{
-		*objectName++ = 0;
-		nodeName = pInData;
-	}
-	else objectName = pInData;
-
-	if (!*objectName) return false;
-
-	UInt8 flag = ((UInt8*)inData)[5];
-	bool insertNode = flag == kHookFormFlag6_InsertNode;
-	auto formsMap = insertNode ? *s_insertNodeMap : *s_attachModelMap;
-
-	if (doInsert & 1)
-	{
-		if (!insertNode)
-		{
-			suffix = objectName;
-			if (*objectName == '*')
-			{
-				if (!(suffix = FindChr(objectName + 2, '*')))
-					return false;
-				suffix++;
-			}
-			StrCopy(meshesPath + 12, suffix);
-			if (!FileExistsEx(meshesPath, false))
-				return false;
-		}
-
-		NiFixedString blockName(nodeName), dataStr, *pDataStr;
-		if (modifyMap)
-		{
-			NodeNamesMap *namesMap;
-			if (formsMap->Insert(form, &namesMap))
-				form->SetJIPFlag(flag, true);
-			if (!(*namesMap)[blockName].Insert(objectName, &pDataStr))
-				return false;
-		}
-		else pDataStr = &dataStr;
-
-		if (insertNode)
-			*pDataStr = objectName + (*objectName == '^');
-
-		if (rootNode && (doInsert & 2))
-		{
-			bool useRoot = !blockName || (rootNode->m_blockName == blockName);
-			NiAVObject *targetObj = useRoot ? rootNode : rootNode->GetBlockByName(blockName.CStr());
-			if (targetObj)
-				if (insertNode)
-					DoInsertNode_Old(targetObj, objectName, pDataStr->CStr(), rootNode);
-				else if ((rootNode = DoAttachModel_Old(targetObj, objectName, pDataStr, rootNode)) && (rootNode->m_flags & 0x20000000))
-					AddPointLights(rootNode);
-			if (refr->IsPlayer() && (rootNode = s_pc1stPersonNode))
-				if (targetObj = useRoot ? rootNode : rootNode->GetBlockByName(blockName.CStr()))
-					if (insertNode)
-						DoInsertNode_Old(targetObj, objectName, pDataStr->CStr(), rootNode);
-					else DoAttachModel_Old(targetObj, objectName, pDataStr, rootNode);
-		}
-	}
-	else
-	{
-		auto findForm = formsMap->Find(form);
-		if (!findForm) return false;
-		auto findNode = findForm().FindOp(NiFixedString(nodeName));
-		if (!findNode) return false;
-		auto findData = findNode().FindOp(objectName);
-		if (!findData) return false;
-		if (rootNode && (doInsert & 2) && findData() && (!insertNode || (*objectName != '^')))
-		{
-			NiAVObject *object = rootNode->GetBlockByName(findData().CStr());
-			if (object)
-				object->m_parent->RemoveObject(object);
-			if (refr->IsPlayer() && (rootNode = s_pc1stPersonNode))
-			{
-				object = rootNode->GetBlockByName(findData().CStr());
-				if (object)
-					object->m_parent->RemoveObject(object);
-			}
-		}
-		findData.Remove(findNode());
-		if (findNode().Empty())
-		{
-			findNode.Remove(findForm());
-			if (findForm().Empty())
-			{
-				findForm.Remove();
-				form->SetJIPFlag(flag, false);
-			}
-		}
-	}
-	s_insertObjects = !s_insertNodeMap->Empty() || !s_attachModelMap->Empty();
-	return true;
-}
-
-
-//Version 57.41
 
 bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 {
-
-	//InsertObjectParams* params = new InsertObjectParams;
-	InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
-	char* outForm = reinterpret_cast<char*>(&params->form);		// write form here
-	char* outMode = reinterpret_cast<char*>(&params->mode);		// write mode here
-	char* pathBuf = params->pathSpec;
-
-	//if (ExtractArgsEx(EXTRACT_ARGS_EX, &params->form, &params->mode, &params->pathSpec))
-	if (ExtractFormatStringArgs(2, pathBuf, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, outForm, outMode))
+	InsertObjectParams* params = new InsertObjectParams;
+	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, &params->form(), &params->mode()))
 	{
-		params->hookFlag = kHookFormFlag6_InsertNode;
+		//params->hookFlag = kHookFormFlag6_InsertNode;
+		params->hookFlag() = InsertObjectParams::registerMode::kInsertNode;
 		if (!(params->isInstant()) || IsInMainThread())
 		{
 			//if (RegisterInsertObject_Old((char*)params))
-			if (RegisterInsertObject_New(*params)) {
+			if (RegisterInsertObject_New(params)) {
 				*result = 1;
 			}
-			Pool_CFree<InsertObjectParams>(params);
 		}
 		//else MainLoopAddCallback(RegisterInsertObject_Old, params);
-		else MainLoopAddCallback(RegisterInsertObject_New, params);
+		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
 	}
-	else Pool_CFree<InsertObjectParams>(params);
+	else { delete params; }
+
 	return true;
 }
 
-/*
-bool Cmd_InsertNode_Execute(COMMAND_ARGS)
-{
-	char* dataStr = Pool_CAlloc(0x100);
-	if (ExtractFormatStringArgs(2, dataStr + 8, EXTRACT_ARGS_EX, kCommandInfo_InsertNode.numParams, dataStr, dataStr + 4))
-	{
-		((UInt8*)dataStr)[5] = kHookFormFlag6_InsertNode;
-		if (!(dataStr[4] & 2) || IsInMainThread())
-		{
-			if (RegisterInsertObject_Old(dataStr))
-				*result = 1;
-		}
-		else MainLoopAddCallback(RegisterInsertObject_Old, dataStr);
-	}
-	else Pool_CFree(dataStr, 0x100);
-	return true;
-}
-*/
-
-//Version 57.41
 bool Cmd_AttachModel_Execute(COMMAND_ARGS)
 {
-
-	//InsertObjectParams* params = new InsertObjectParams;
-	InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
-	char* buf = params->pathSpec;								// the buffer to split
-	char* outForm = reinterpret_cast<char*>(&params->form);		// write form here
-	char* outMode = reinterpret_cast<char*>(&params->mode);		// write mode here
-	char* pathBuf = params->pathSpec;
-
-	//if (ExtractArgsEx(EXTRACT_ARGS_EX, &params->form, &params->mode, &params->pathSpec))
-	if (ExtractFormatStringArgs(2, buf, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, outForm, outMode))
+	InsertObjectParams* params = new InsertObjectParams;
+	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, &params->form(), &params->mode()))
 	{
-		params->hookFlag = kHookFormFlag6_AttachModel;
+
+		params->hookFlag() = InsertObjectParams::registerMode::kAttachModel;
 		if (!(params->isInstant()) || IsInMainThread())
 		{
 			//if (RegisterInsertObject_Old((char*)params))
-			if (RegisterInsertObject_New(*params)) {
+			if (RegisterInsertObject_New(params)) {
 				*result = 1;
 			}
-			Pool_CFree<InsertObjectParams>(params);
+		}
+		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
+	}
+	else { delete params; }
 
-		}
-		//else MainLoopAddCallback(RegisterInsertObject_Old, params);
-		else MainLoopAddCallback(RegisterInsertObject_New, params);
-	}
-	else Pool_CFree<InsertObjectParams>(params);
 	return true;
 }
-/*
-bool Cmd_AttachModel_Execute(COMMAND_ARGS)
+
+//Version 57.48
+bool Cmd_AttachFormModel_Execute(COMMAND_ARGS)
 {
-	char* dataStr = Pool_CAlloc(0x100);
-	if (ExtractFormatStringArgs(2, dataStr + 8, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, dataStr, dataStr + 4))
+	InsertObjectParams* params = new InsertObjectParams;
+	if (ExtractFormatStringArgs(3, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachFormModel.numParams, &params->form(), &params->toAttachForm(), &params->mode()))
 	{
-		((UInt8*)dataStr)[5] = kHookFormFlag6_AttachModel;
-		if (!(dataStr[4] & 2) || IsInMainThread())
+		params->hookFlag() = InsertObjectParams::registerMode::kAttachRef;
+		if (!(params->isInstant()) || IsInMainThread())
 		{
-			if (RegisterInsertObject_Old(dataStr))
+			if (RegisterInsertObject_New(params)) {
 				*result = 1;
+			}
 		}
-		else MainLoopAddCallback(RegisterInsertObject_Old, dataStr);
+		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
 	}
-	else Pool_CFree(dataStr, 0x100);
+	else { delete params; }
+
 	return true;
 }
-*/
+
 bool Cmd_SynchronizePosition_Execute(COMMAND_ARGS)
 {
 	TESObjectREFR *targetRef = nullptr;
@@ -1816,31 +1732,134 @@ bool Cmd_ModelHasBlock_Execute(COMMAND_ARGS)
 	{
 		TESObjectREFR* refr = IS_REFERENCE(form) ? (TESObjectREFR*)form : nullptr;
 		NiNode* rootNode = refr ? refr->GetNiNode() : nullptr;
+		NiBlockPathBase path(buffer);
 
 		if (rootNode) {
 
-			bool foundNode = rootNode->DeepSearchBySparsePath(NiBlockPathBase(buffer)) != nullptr;
-
-			if (foundNode) {
-				*result = foundNode;
+			if (rootNode->DeepSearchBySparsePath(path) != nullptr) {
+				*result = true;
 				return true;
-			}
-			else if (refr->IsPlayer()) {
-				if (g_thePlayer->node1stPerson->DeepSearchBySparsePath(NiBlockPathBase(buffer))) {
-					foundNode = true;
-				}
-				return true;	//Return early, because the player model is always loaded
 			}
 
 		}
 
 		if (refr) {
-			*result = FormRuntimeModelManager::getSingleton().HasNode(refr->baseForm, buffer);
+			*result = FormRuntimeModelManager::getSingleton().HasNode(refr, path);
 		}
 		else {
-			*result = FormRuntimeModelManager::getSingleton().HasNode(form, buffer);
+			*result = FormRuntimeModelManager::getSingleton().HasNode(form, path);
 		}
 
+	}
+	return true;
+}
+
+bool Cmd_CopyRuntimeNodes_Execute(COMMAND_ARGS)
+{
+
+	PluginExpressionEvaluator eval(PASS_COMMAND_ARGS);
+	if (!eval.ExtractArgs()) return true;
+
+	TESForm* copyTo = eval.GetNthArg(0)->GetTESForm();
+	TESForm* copyFrom = eval.GetNthArg(1)->GetTESForm();
+	bool overwrite = false;
+	if (eval.NumArgs() > 2) {
+		overwrite = eval.GetNthArg(2)->GetBool();
+	}
+	if (overwrite) {
+		FormRuntimeModelManager::getSingleton().OverwriteRuntimeNodes(copyTo, copyFrom);
+	}
+	else {
+		FormRuntimeModelManager::getSingleton().CopyRuntimeNodes(copyTo, copyFrom);
+	}
+
+	return true;
+}
+
+bool Cmd_EraseRuntimeNode_Execute(COMMAND_ARGS)
+{
+
+	PluginExpressionEvaluator eval(PASS_COMMAND_ARGS);
+
+	if (!eval.ExtractArgs()) return true;
+	TESForm* form = eval.GetNthArg(0)->GetTESForm();
+
+	bool useModIndex = true;
+	if (eval.NumArgs() > 1) {
+		useModIndex = eval.GetNthArg(1)->GetBool();
+	}
+
+	if (form)
+	{
+		if (useModIndex) {
+			FormRuntimeModelManager::getSingleton().RemoveAllRuntimeNodes_RelToMod(form, scriptObj->modIndex);
+		}
+		else {
+			FormRuntimeModelManager::getSingleton().RemoveAllRuntimeNodes(form);
+		}
+	}
+
+	return true;
+}
+
+bool Cmd_HasRuntimeNode_Execute(COMMAND_ARGS)
+{
+	*result = 0.0;
+
+	PluginExpressionEvaluator eval(PASS_COMMAND_ARGS);
+	if (!eval.ExtractArgs()) return true;
+
+    TESForm*			form = eval.GetNthArg(0)->GetTESForm();
+    const char*			path = eval.GetNthArg(1)->GetString();
+    PluginScriptToken*	token = eval.GetNthArg(2);
+
+	if (!form || !path || !*path || !token || !form->IsBoundObject())
+		return true;
+
+	auto& manager = FormRuntimeModelManager::getSingleton();
+
+	if (token->IsNumericLike()) {
+
+		UInt32 searchType = 0;
+		if (!token->TryGetUInt(searchType)) return true;
+
+		switch (searchType) {
+		case 0: *result = manager.hasRuntimeNodePath(form, path);   break;
+		case 1: *result = manager.hasRuntimeNodeNiNode(form, path); break;
+		case 2: *result = manager.hasRuntimeNodeModel(form, path);  break;
+		default:
+			Console_Print("HasRuntimeNode: unknown numeric selector %u (arg2=%s/%u)", searchType, token->TypeName(), token->GetType());
+			break;
+		}
+		return true;
+	}
+	else if (token->IsFormLike()) {
+		TESForm* ref = nullptr;
+		if (token->TryGetTESForm(ref) && ref)
+			*result = manager.hasRuntimeNodeRefModel(form, ref, path) ? 1.0 : 0.0;
+		else
+			Console_Print("HasRuntimeNode: null form for arg2 (arg2=%s/%u)", token->TypeName(), token->GetType());
+		return true;
+	}
+
+	Console_Print("HasRuntimeNode: unsupported arg2 type %s (%u)", token->TypeName(), token->GetType());
+	return true;
+}
+
+bool Cmd_GetRuntimeNodes_Execute(COMMAND_ARGS)
+{
+	*result = 0.0;
+
+	TESForm* target = nullptr;
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &target)) return true;
+	if (!target || !target->IsBoundObject())     return true;
+
+	if (NiRuntimeNodeVector* allNodes = target->getRuntimeNodes()) {
+		NVSEArrayVar* map = CreateStringMap(nullptr, nullptr, 0, scriptObj); //Maybe set the size of the array upfront.
+		if (!map) return true;
+
+		allNodes->AppendPathsTo(map);
+		*result = (int)map;
 	}
 	return true;
 }
@@ -1907,7 +1926,7 @@ bool Cmd_GetChildBlocks_Execute(COMMAND_ARGS)
 	char blockName[0x40];
 	blockName[0] = 0;
 	UInt32 noRecourse = 0;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &playerNode, &noRecourse))
 		if (NiNode *objNode = (NiNode*)thisObj->findNodeByName(playerNode, blockName); objNode && IS_NODE(objNode))
 		{
@@ -2014,7 +2033,7 @@ bool Cmd_AttachExtraCamera_Execute(COMMAND_ARGS)
 	char camName[0x40], nodeName[0x40];
 	UInt32 doAttach;
 	nodeName[0] = 0;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	NiCamera *xCamera;
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &camName, &doAttach, &nodeName, &playerNode) && camName[0])
 		if (doAttach)
@@ -2096,7 +2115,7 @@ bool Cmd_ProjectExtraCamera_Execute(COMMAND_ARGS)
 bool Cmd_RenameNifBlock_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40], newName[0x40];
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &newName, &playerNode))
 		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
@@ -2109,7 +2128,7 @@ bool Cmd_RenameNifBlock_Execute(COMMAND_ARGS)
 bool Cmd_RemoveNifBlock_Execute(COMMAND_ARGS)
 {
 	char blockName[0x40];
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &playerNode))
 		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
@@ -2158,7 +2177,7 @@ bool Cmd_GetNifBlockTranslationAlt_Execute(COMMAND_ARGS)
 	char blockName[0x40];
 	ResultVars outPos;
 	UInt32 getWorld = 0;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &outPos.x, &outPos.y, &outPos.z, &getWorld, &playerNode))
 		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
@@ -2173,7 +2192,7 @@ bool Cmd_GetNifBlockRotationAlt_Execute(COMMAND_ARGS)
 	char blockName[0x40];
 	ResultVars outRot;
 	UInt32 getMode = 0;
-	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &outRot.x, &outRot.y, &outRot.z, &getMode, &playerNode))
 		if (NiAVObject *niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{

@@ -1429,6 +1429,15 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 	//	v57.47
 	/*2943*/REG_CMD(GetControlCodeByID);
 
+	// v57.48
+	REG_CMD(AttachFormModel);
+	REG_CMD(CopyRuntimeNodes);
+	REG_CMD(HasRuntimeNode);
+	REG_CMD_ARR(GetRuntimeNodes);
+
+	REG_CMD(RefreshInventoryWeight);
+	
+
 	//===========================================================
 
 	if (nvse->isEditor)

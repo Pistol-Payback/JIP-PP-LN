@@ -5,6 +5,7 @@
 #pragma once
 
 #include <vector>
+#include <ranges>
 #include <algorithm>
 #include <cstddef>
 #include <span>
@@ -34,8 +35,54 @@ public:
     }
 
     // Disable copy (can be added as needed)
-    VectorSortedView(const VectorSortedView&) = delete;
-    VectorSortedView& operator=(const VectorSortedView&) = delete;
+    //VectorSortedView(const VectorSortedView&) = delete;
+    //VectorSortedView& operator=(const VectorSortedView&) = delete;
+
+    //Copy construct
+    VectorSortedView(const VectorSortedView& src)
+        : storage_(nullptr), view_(nullptr), size_(0), capacity_(0), comp_(src.comp_)
+    {
+        if (src.size_ == 0) return;
+
+        // allocate new buffers
+        T* newStorage = static_cast<T*>(::operator new[](sizeof(T)* src.size_));
+        T** newView = new T * [src.size_];
+
+        size_type constructed = 0;
+        try {
+            // copy-construct storage elements in order
+            for (; constructed < src.size_; ++constructed) {
+                new (&newStorage[constructed]) T(src.storage_[constructed]);
+            }
+
+            // rebuild view preserving source's sorted order
+            for (size_type i = 0; i < src.size_; ++i) {
+                size_type sidx = static_cast<size_type>(src.view_[i] - src.storage_);
+                newView[i] = &newStorage[sidx];
+            }
+
+            storage_ = newStorage;
+            view_ = newView;
+            size_ = src.size_;
+            capacity_ = src.size_;
+        }
+        catch (...) {
+            // destroy constructed elements
+            for (size_type i = 0; i < constructed; ++i) {
+                newStorage[i].~T();
+            }
+            ::operator delete[](newStorage);
+            delete[] newView;
+            throw;
+        }
+    }
+
+    VectorSortedView& operator=(const VectorSortedView& src) {
+        if (this == &src) return *this;
+        VectorSortedView tmp(src); // may throw; strong guarantee
+        swap(tmp);
+        return *this;
+    }
 
     // Move semantics
     VectorSortedView(VectorSortedView&& other) noexcept
@@ -64,6 +111,15 @@ public:
             other.size_ = other.capacity_ = 0;
         }
         return *this;
+    }
+
+    void swap(VectorSortedView& other) noexcept {
+        using std::swap;
+        swap(storage_, other.storage_);
+        swap(view_, other.view_);
+        swap(size_, other.size_);
+        swap(capacity_, other.capacity_);
+        swap(comp_, other.comp_);
     }
 
     // Reserve capacity
