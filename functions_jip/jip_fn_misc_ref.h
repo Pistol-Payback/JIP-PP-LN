@@ -111,8 +111,7 @@ DEFINE_COMMAND_PLUGIN_EXP(HasRuntimeNode, false, kParams_OneForm_OneString_OneOp
 DEFINE_COMMAND_PLUGIN_EXP(CopyRuntimeNodes, false, kParams_TwoForms_OneOptionalInt);
 DEFINE_COMMAND_PLUGIN_EXP(EraseRuntimeNode, false, kParams_OneForm_OneOptionalInt);
 
-
-//DEFINE_CMD_COND_PLUGIN(ModelHasBlockCOND, 1, kParams_OneForm_OneString);
+DEFINE_COMMAND_PLUGIN_EXP(ClampToGround, false, nullptr);
 
 bool Cmd_SetPersistent_Execute(COMMAND_ARGS)
 {
@@ -750,6 +749,13 @@ bool Cmd_SetPosEx_Execute(COMMAND_ARGS)
 			thisObj->SetPos(posVector.SetPS(thisObj->GetTranslatedPos(posVector)));
 		else if (transform == 2)
 			thisObj->SetPos(posVector += thisObj->position.PS());
+	return true;
+}
+
+bool Cmd_ClampToGround_Execute(COMMAND_ARGS)
+{
+	thisObj->ClampToGround();
+	thisObj->SetPos(thisObj->position);
 	return true;
 }
 

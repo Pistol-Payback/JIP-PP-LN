@@ -53,7 +53,7 @@ public:
 	/*1B0*/virtual BSFaceGenNiNode*			GetFaceGenNodeSkinned(UInt32 arg1);
 	/*1B4*/virtual BSFaceGenNiNode*			CallGetFaceGenNodeSkinned(UInt32 arg1);	// REFR: calls 006C
 	/*1B8*/virtual BSFaceGenAnimationData*	CreateFaceAnimationData(UInt32 arg1);
-	/*1BC*/virtual void						Unk_6F(void);
+	/*1BC*/virtual void						ClampToGround(void);	//From Geck
 	/*1C0*/virtual bool						Unload3D();
 	/*1C4*/virtual void						AnimateNiNode();
 	/*1C8*/virtual NiNode*					GenerateNiNode(bool arg1);
