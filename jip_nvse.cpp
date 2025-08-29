@@ -1440,7 +1440,6 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 
 	REG_CMD(ClampToGround);
 	
-
 	//===========================================================
 
 	if (nvse->isEditor)

@@ -189,6 +189,14 @@ public:
 		return ThisCall<bool>(0x573170, this, actionRef, arg2, arg3, arg4);
 	}
 
+	void RefreshInventoryWeight()
+	{
+		if (auto xChanges = GetExtraType(&this->extraDataList, ExtraContainerChanges); xChanges && xChanges->data)
+		{
+			xChanges->data->totalWgCurrent = xChanges->data->pGetInventoryWeight();
+		}
+	}
+
 	NiAVObject* findNodeByName(GetRootNodeMask pcNode, const char* blockName);
 	NiAVObject* findNodeByNameTest(GetRootNodeMask pcNode, const char* blockName);
 
@@ -801,14 +809,6 @@ public:
 	int GetGroundMaterial() const;
 	void RefreshAnimData();
 	double GetPathingDistance(TESObjectREFR *target);
-
-	void RefreshInventoryWeight(TESObjectREFR* thisObj)
-	{
-		if (auto xChanges = GetExtraType(&thisObj->extraDataList, ExtraContainerChanges); xChanges && xChanges->data)
-		{
-			xChanges->data->totalWgCurrent = xChanges->data->pGetInventoryWeight(false);
-		}
-	}
 
 };
 

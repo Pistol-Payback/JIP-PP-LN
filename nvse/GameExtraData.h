@@ -391,7 +391,7 @@ public:
 
 		static Data *Create(TESObjectREFR *owner);
 		double GetInventoryWeight() const;
-		double pGetInventoryWeight(bool excludeNonPlayable = false);
+		double pGetInventoryWeight();
 	};
 
 	Data	*data;	// 0C

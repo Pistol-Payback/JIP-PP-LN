@@ -35,20 +35,15 @@ bool Cmd_SetBaseForm_Execute(COMMAND_ARGS)
 
 bool Cmd_RefreshInventoryWeight_Execute(COMMAND_ARGS)
 {
-	if (IS_ACTOR(thisObj)) {
-		((Actor*)thisObj)->RefreshInventoryWeight(thisObj);
-	}
+	thisObj->RefreshInventoryWeight();
 	return true;
 }
 
 bool Cmd_GetInventoryWeight_Execute(COMMAND_ARGS)
 {
-	UInt32 excludeNonPlayable = true;
-	if (!containingObj && ExtractArgsEx(EXTRACT_ARGS_EX, &excludeNonPlayable))
-	{
-		if (auto xChanges = GetExtraType(&thisObj->extraDataList, ExtraContainerChanges); xChanges && xChanges->data)
-			*result = xChanges->data->pGetInventoryWeight(excludeNonPlayable);
-	}
+	//UInt32 excludeNonPlayable = false; not used
+	if (auto xChanges = GetExtraType(&thisObj->extraDataList, ExtraContainerChanges); xChanges && xChanges->data)
+		*result = xChanges->data->pGetInventoryWeight();
 	DoConsolePrint(result);
 	return true;
 }

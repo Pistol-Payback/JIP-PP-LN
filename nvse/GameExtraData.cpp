@@ -351,12 +351,12 @@ __declspec(naked) double ExtraContainerChanges::Data::GetInventoryWeight() const
 }
 
 static inline volatile UInt8& g_InvWeightInProgressFlag = *reinterpret_cast<volatile UInt8*>(0x11E0898);
-double __thiscall ExtraContainerChanges::Data::pGetInventoryWeight(bool excludeNonPlayable)
+double __thiscall ExtraContainerChanges::Data::pGetInventoryWeight()
 {
 	this->totalWgCurrent = -1.0f;
-	//const bool isHardcore = static_cast<UInt8>(PlayerCharacter::GetSingleton()->isHardcore);
+	const bool isHardcore = static_cast<UInt8>(PlayerCharacter::GetSingleton()->isHardcore);
 	g_InvWeightInProgressFlag = 1;
-	double result = ThisCall<double>(0x4D0900, this, excludeNonPlayable);
+	double result = ThisCall<double>(0x4D0900, this, isHardcore);
 	g_InvWeightInProgressFlag = 0;
 	return result;
 }
