@@ -1476,10 +1476,10 @@ public:
 	{
 		kDiffuse = 0,
 		kNormal,
-		kEnvMask,
+		kMetallic,
 		kGlow,
 		kParallax,
-		kEnv
+		kCubeMap
 	};
 
 	enum

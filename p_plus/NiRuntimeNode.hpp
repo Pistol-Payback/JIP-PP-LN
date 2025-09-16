@@ -22,22 +22,24 @@ struct NiRuntimeNode {
     NiRuntimeNode& operator=(const NiRuntimeNode&) = default;
     ~NiRuntimeNode() = default;
 
-    NiRuntimeNode(NiBlockPathBase&& path, const NiFixedString& leafName, const NiToken value, NiBlockPathStatic&& fullPath)
+    NiRuntimeNode(UInt32 modIndex, NiBlockPathBase&& path, const NiFixedString& leafName, const NiToken value, NiBlockPathStatic&& fullPath)
         : 
+        modIndex(modIndex),
         value(value),
         sparsePath(std::move(path)),
         node(leafName),
         cachedPath(std::move(fullPath))
     {}
 
-    NiRuntimeNode(NiBlockPathBase&& path, const NiFixedString& leafName, const NiToken value = {})
+    NiRuntimeNode(UInt32 modIndex, NiBlockPathBase&& path, const NiFixedString& leafName, const NiToken value = {})
         :
+        modIndex(modIndex),
         value(value),
         sparsePath(std::move(path)),
         node(leafName)
     {}
 
-    NiRuntimeNode(const char* fullPath, const char* leafName, const NiToken value = {}) : value(value), node(leafName), cachedPath(fullPath) {}
+    NiRuntimeNode(UInt32 modIndex, const char* fullPath, const char* leafName, const NiToken value = {}) : modIndex(modIndex), value(value), node(leafName), cachedPath(fullPath) {}
 
     NiToken  value;
 

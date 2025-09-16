@@ -105,11 +105,12 @@ DEFINE_COMMAND_PLUGIN_EXP(GetRefExtraData, 1, kParams_NVSE_OneNum_OneOptionalNum
 DEFINE_COMMAND_PLUGIN_EXP(SetRefExtraData, 1, kParams_NVSE_OneOptionalNum_OneOptionalBasicType);
 DEFINE_COMMAND_ALT_PLUGIN(TogglePurgeOnUnload, TPOU, 1, kParams_OneOptionalInt);
 
-DEFINE_COMMAND_PLUGIN(AttachFormModel, false, kParams_TwoForms_OneInt_OneFormatString);
+
+DEFINE_COMMAND_PLUGIN(AttachFormModel, false, kParams_TwoForms_OneInt_OneOptionalFormatString);
 DEFINE_COMMAND_PLUGIN(GetRuntimeNodes, false, kParams_OneForm);
 DEFINE_COMMAND_PLUGIN_EXP(HasRuntimeNode, false, kParams_OneForm_OneString_OneOptionalBasicType);
 DEFINE_COMMAND_PLUGIN_EXP(CopyRuntimeNodes, false, kParams_TwoForms_OneOptionalInt);
-DEFINE_COMMAND_PLUGIN_EXP(EraseRuntimeNode, false, kParams_OneForm_OneOptionalInt);
+DEFINE_COMMAND_PLUGIN_EXP(EraseRuntimeNodes, false, kParams_OneForm_OneOptionalInt);
 
 DEFINE_COMMAND_PLUGIN_EXP(ClampToGround, false, nullptr);
 
@@ -1531,34 +1532,16 @@ struct InsertObjectParams {
 		kAttach_Instant = 3   // 11
 	};
 
-	// ---- Header (everything before pathSpec) ----
-	struct Header {
-		TESForm* form;          // +0
-		TESForm* toAttachForm;  // +4
-		InsertMode   mode;          // +8
-		registerMode hookFlag;      // +9
-		UInt16       reserved;      // +10  => header size = 12 bytes (today)
-	} header;
+	TESForm* form;
+	TESForm* toAttachForm;
+	InsertMode   mode;
+	registerMode hookFlag;
+	UInt16 modIndex = 0;
 
-	// Make "12" derive from sizeof(Header)
-	static constexpr size_t kHeaderBytes = sizeof(Header);
-
-	// ---- Flexible tail buffer (size is kTotalBytes - sizeof(Header)) ----
-	//char pathSpec[kTotalBytes - kHeaderBytes];
 	char pathSpec[kTotalBytes];
 
-	// Accessors so call sites can keep using the same names
-	TESForm*&		form()			noexcept { return header.form; }
-	TESForm*		form()			const noexcept { return header.form; }
-	TESForm*&		toAttachForm()	noexcept { return header.toAttachForm; }
-	TESForm*		toAttachForm()	const noexcept { return header.toAttachForm; }
-	InsertMode&		mode()          noexcept { return header.mode; }
-	InsertMode		mode()			const noexcept { return header.mode; }
-	registerMode&	hookFlag()		noexcept { return header.hookFlag; }
-	registerMode	hookFlag()		const noexcept { return header.hookFlag; }
-
-	constexpr bool isAttach()		const noexcept { return (static_cast<UInt8>(header.mode) & 1u) != 0; }
-	constexpr bool isInstant()		const noexcept { return (static_cast<UInt8>(header.mode) & 2u) != 0; }
+	constexpr bool isAttach()		const noexcept { return (static_cast<UInt8>(mode) & 1u) != 0; }
+	constexpr bool isInstant()		const noexcept { return (static_cast<UInt8>(mode) & 2u) != 0; }
 
 	static constexpr size_t pathCapacity() noexcept { return sizeof(pathSpec); }
 
@@ -1570,7 +1553,7 @@ bool __fastcall RegisterInsertObject_New(InsertObjectParams* inData) {
 
 	bool result = false;
 	// Determine if we have a reference, and bail out early if invalid
-	TESObjectREFR* refr = IS_REFERENCE(inData->form()) ? static_cast<TESObjectREFR*>(inData->form()) : nullptr;
+	TESObjectREFR* refr = IS_REFERENCE(inData->form) ? static_cast<TESObjectREFR*>(inData->form) : nullptr;
 
 	NiNode*		rootNode = nullptr;
 	ModelTemp	temp; // freed at scope end
@@ -1582,11 +1565,11 @@ bool __fastcall RegisterInsertObject_New(InsertObjectParams* inData) {
 		}
 		else if (attach) {
 
-			const char* const modelPath = inData->form()->GetModelPath();
+			const char* const modelPath = inData->form->GetModelPath();
 			if (!modelPath) return result;
 			if (!temp.load(modelPath)) return result;
 			rootNode = temp.clonedNode;
-			rootNode->attachAllRuntimeNodes(inData->form()->getRuntimeNodes());
+			rootNode->attachAllRuntimeNodes(inData->form->getRuntimeNodes());
 
 		}
 	}
@@ -1594,41 +1577,42 @@ bool __fastcall RegisterInsertObject_New(InsertObjectParams* inData) {
 	bool modifyMap = true;
 	if (refr) {
 		if (refr->IsCreated() || kInventoryType[refr->baseForm->typeID]) {
-			if ((inData->mode() != InsertObjectParams::InsertMode::kAttach_Instant) || !rootNode) {
+			if ((inData->mode != InsertObjectParams::InsertMode::kAttach_Instant) || !rootNode) {
 				return result;
 			}
 			modifyMap = false; //dont insert into runtime nodes map, simply attach to the existing node
 		}
 	}
-	else if (!inData->form()->IsBoundObject()) { return result; }
+	else if (!inData->form->IsBoundObject()) { return result; }
 
 
 	// Use the reference itself as the form if present
-	TESForm* targetForm = refr ? refr : inData->form();
+	TESForm* targetForm = refr ? refr : inData->form;
 	const char* path = inData->pathSpec;
 
-	switch (inData->hookFlag()) {
+	switch (inData->hookFlag) {
 	case InsertObjectParams::registerMode::kInsertNode:
 		if (attach)
-			result = FormRuntimeModelManager::getSingleton().RegisterNode(targetForm, path, rootNode, modifyMap);
+			result = FormRuntimeModelManager::getSingleton().RegisterNode(inData->modIndex, targetForm, path, rootNode, modifyMap);
 		else
 			result = FormRuntimeModelManager::getSingleton().RemoveNode(targetForm, path, rootNode);
 		break;
 
 	case InsertObjectParams::registerMode::kAttachModel:
 		if (attach)
-			result = FormRuntimeModelManager::getSingleton().RegisterModel(targetForm, path, rootNode, modifyMap);
+			result = FormRuntimeModelManager::getSingleton().RegisterModel(inData->modIndex, targetForm, path, rootNode, modifyMap);
 		else
 			result = FormRuntimeModelManager::getSingleton().RemoveModel(targetForm, path, rootNode);
 		break;
 	case InsertObjectParams::registerMode::kAttachRef:
 		if (attach)
-			result = FormRuntimeModelManager::getSingleton().RegisterRefModel(targetForm, inData->toAttachForm(), path, rootNode, modifyMap);
+			result = FormRuntimeModelManager::getSingleton().RegisterRefModel(inData->modIndex, targetForm, inData->toAttachForm, path, rootNode, modifyMap);
 		else
-			result = FormRuntimeModelManager::getSingleton().RemoveRefModel(targetForm, inData->toAttachForm(), path, rootNode);
+			result = FormRuntimeModelManager::getSingleton().RemoveRefModel(targetForm, inData->toAttachForm, path, rootNode);
 		break;
 	}
 
+	//Pool_CFree<InsertObjectParams>(inData);
 	delete inData;
 
 	return result;
@@ -1637,11 +1621,13 @@ bool __fastcall RegisterInsertObject_New(InsertObjectParams* inData) {
 
 bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 {
+	//InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
 	InsertObjectParams* params = new InsertObjectParams;
-	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, &params->form(), &params->mode()))
+	//if (ExtractArgsEx(EXTRACT_ARGS_EX, &params->form, &params->mode, &params->pathSpec))
+	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, &params->form, &params->mode))
 	{
 		//params->hookFlag = kHookFormFlag6_InsertNode;
-		params->hookFlag() = InsertObjectParams::registerMode::kInsertNode;
+		params->hookFlag = InsertObjectParams::registerMode::kInsertNode;
 		if (!(params->isInstant()) || IsInMainThread())
 		{
 			//if (RegisterInsertObject_Old((char*)params))
@@ -1652,6 +1638,7 @@ bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 		//else MainLoopAddCallback(RegisterInsertObject_Old, params);
 		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
 	}
+	//else { Pool_CFree<InsertObjectParams>(params); }
 	else { delete params; }
 
 	return true;
@@ -1659,11 +1646,12 @@ bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 
 bool Cmd_AttachModel_Execute(COMMAND_ARGS)
 {
+	//InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
 	InsertObjectParams* params = new InsertObjectParams;
-	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, &params->form(), &params->mode()))
+	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, &params->form, &params->mode))
 	{
 
-		params->hookFlag() = InsertObjectParams::registerMode::kAttachModel;
+		params->hookFlag = InsertObjectParams::registerMode::kAttachModel;
 		if (!(params->isInstant()) || IsInMainThread())
 		{
 			//if (RegisterInsertObject_Old((char*)params))
@@ -1673,6 +1661,7 @@ bool Cmd_AttachModel_Execute(COMMAND_ARGS)
 		}
 		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
 	}
+	//else { Pool_CFree<InsertObjectParams>(params); }
 	else { delete params; }
 
 	return true;
@@ -1681,10 +1670,12 @@ bool Cmd_AttachModel_Execute(COMMAND_ARGS)
 //Version 57.48
 bool Cmd_AttachFormModel_Execute(COMMAND_ARGS)
 {
+	//InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
 	InsertObjectParams* params = new InsertObjectParams;
-	if (ExtractFormatStringArgs(3, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachFormModel.numParams, &params->form(), &params->toAttachForm(), &params->mode()))
+	if (ExtractFormatStringArgs(3, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachFormModel.numParams, &params->form, &params->toAttachForm, &params->mode))
 	{
-		params->hookFlag() = InsertObjectParams::registerMode::kAttachRef;
+		params->hookFlag = InsertObjectParams::registerMode::kAttachRef;
+		params->modIndex = scriptObj->modIndex;
 		if (!(params->isInstant()) || IsInMainThread())
 		{
 			if (RegisterInsertObject_New(params)) {
@@ -1693,6 +1684,7 @@ bool Cmd_AttachFormModel_Execute(COMMAND_ARGS)
 		}
 		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
 	}
+	//else { Pool_CFree<InsertObjectParams>(params); }
 	else { delete params; }
 
 	return true;
@@ -1782,7 +1774,7 @@ bool Cmd_CopyRuntimeNodes_Execute(COMMAND_ARGS)
 	return true;
 }
 
-bool Cmd_EraseRuntimeNode_Execute(COMMAND_ARGS)
+bool Cmd_EraseRuntimeNodes_Execute(COMMAND_ARGS)
 {
 
 	PluginExpressionEvaluator eval(PASS_COMMAND_ARGS);
@@ -1790,18 +1782,18 @@ bool Cmd_EraseRuntimeNode_Execute(COMMAND_ARGS)
 	if (!eval.ExtractArgs()) return true;
 	TESForm* form = eval.GetNthArg(0)->GetTESForm();
 
-	bool useModIndex = true;
+	bool eraseAll = false;
 	if (eval.NumArgs() > 1) {
-		useModIndex = eval.GetNthArg(1)->GetBool();
+		eraseAll = eval.GetNthArg(1)->GetBool();
 	}
 
 	if (form)
 	{
-		if (useModIndex) {
-			FormRuntimeModelManager::getSingleton().RemoveAllRuntimeNodes_RelToMod(form, scriptObj->modIndex);
+		if (eraseAll) {
+			FormRuntimeModelManager::getSingleton().RemoveAllRuntimeNodes(form);
 		}
 		else {
-			FormRuntimeModelManager::getSingleton().RemoveAllRuntimeNodes(form);
+			FormRuntimeModelManager::getSingleton().RemoveAllRuntimeNodes_RelToMod(form, scriptObj->modIndex);
 		}
 	}
 

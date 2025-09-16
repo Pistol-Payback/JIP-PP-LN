@@ -312,6 +312,7 @@
   <ItemGroup>
     <Natvis Include="p_plus\NiBlockPath.natvis" />
     <Natvis Include="p_plus\NiFixedString.natvis" />
+    <Natvis Include="p_plus\NiTArray.natvis" />
     <Natvis Include="p_plus\pBitMask.natvis" />
     <Natvis Include="p_plus\VectorSortedView.natvis" />
   </ItemGroup>

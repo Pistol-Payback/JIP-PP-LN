@@ -163,7 +163,7 @@ public:
         if (!form || !fullPath || !*fullPath)
             return false;
 
-        HasNode(form, NiBlockPathBase(fullPath), searchFullModel);
+        return HasNode(form, NiBlockPathBase(fullPath), searchFullModel);
     }
 
     // Returns true if any registered NiNodePath for this form matches `toFind`
@@ -194,11 +194,11 @@ public:
                 return true;
         }
 
-        // Fallback: fully built model search
-        if (searchFullModel) {
+        if (searchFullModel == false) {
             return false;
         }
 
+        // Fallback: fully built model search
         if (const char* path = form->GetModelPath()) {
 
             ModelTemp temp = ModelTemp(path);
@@ -215,6 +215,9 @@ public:
 
             }
         }
+
+        return false;
+
     }
 
     bool hasRuntimeNodePath(TESForm* form, const char* fullPath) {
@@ -235,7 +238,7 @@ public:
             if (runtimeList->findNodeWithPath(blockPath))
                 return true;
         }
-
+        return false;
     }
 
     bool hasRuntimeNodeNiNode(TESForm* form, const char* formattedNode) {
@@ -262,7 +265,7 @@ public:
         if (form->IsPlayer() && playerFirstPersonModel.lookupNode(blockPath, name) == nullptr) {
             return true;
         }
-
+        return false;
     }
 
     bool hasRuntimeNodeModel(TESForm* form, const char* formattedNode) {
@@ -287,7 +290,7 @@ public:
         if (form->IsPlayer() && playerFirstPersonModel.lookupModel(blockPath, model) == nullptr) {
             return true;
         }
-
+        return false;
     }
 
     bool hasRuntimeNodeRefModel(TESForm* form, TESForm* toAttach, const char* formattedNode) {
@@ -312,12 +315,12 @@ public:
         if (form->IsPlayer() && playerFirstPersonModel.lookupRefModel(blockPath, model) == nullptr) {
             return true;
         }
-
+        return false;
     }
 
     /// Register a new node‐path for `form`.
     /// If this is the first path for the form, set its JIP flag on.
-    bool RegisterNode(TESForm* form, const char* formattedNode, NiNode* root, bool insertIntoMap) {
+    bool RegisterNode(UInt32 modIndex, TESForm* form, const char* formattedNode, NiNode* root, bool insertIntoMap) {
 
         bool successful = false;
 
@@ -342,7 +345,7 @@ public:
         // First-person hook (Player only)
         if (form->IsPlayer() && playerFirstPersonModel.lookupNode(blockPath, name) == nullptr) {
 
-            successful = playerFirstPersonModel.attachNode(g_thePlayer->node1stPerson, blockPath, outNodeName, insertIntoMap);
+            successful = playerFirstPersonModel.attachNode(modIndex, g_thePlayer->node1stPerson, blockPath, outNodeName, insertIntoMap);
             form->SetJIPFlag(kAttachHookFlags_InsertNode, true);
 
             //if (g_thePlayer->node1stPerson == root) {
@@ -358,13 +361,13 @@ public:
         if (!runtimeList) {
             // first-ever node for this form
             NiRuntimeNodeVector formRuntimeNodes;
-            if (!formRuntimeNodes.attachNode(root, blockPath, outNodeName, insertIntoMap)) {
+            if (!formRuntimeNodes.attachNode(modIndex, root, blockPath, outNodeName, insertIntoMap)) {
                 return successful;
             }
             auto result = nodeTree.try_emplace(form, std::move(formRuntimeNodes));
 
         }
-        else if (!runtimeList->attachNode(root, blockPath, outNodeName, insertIntoMap)) {
+        else if (!runtimeList->attachNode(modIndex, root, blockPath, outNodeName, insertIntoMap)) {
             return successful;
         }
 
@@ -373,7 +376,7 @@ public:
 
     }
 
-    bool RegisterModel(TESForm* form, const char* formattedNode, NiNode* root, bool insertIntoMap) {
+    bool RegisterModel(UInt32 modIndex, TESForm* form, const char* formattedNode, NiNode* root, bool insertIntoMap) {
 
         if (!form) return false;
         NiRuntimeNodeVector* runtimeList = getNodesList(form);
@@ -398,7 +401,7 @@ public:
         // First-person (Player only)
         if (form->IsPlayer() && playerFirstPersonModel.lookupModel(blockPath, model) == nullptr) {
 
-            playerFirstPersonModel.attachModel(g_thePlayer->node1stPerson, blockPath, model, insertIntoMap);
+            playerFirstPersonModel.attachModel(modIndex, g_thePlayer->node1stPerson, blockPath, model, insertIntoMap);
             form->SetJIPFlag(kAttachHookFlags_AttachModel, true);
 
         }
@@ -410,7 +413,7 @@ public:
         if (!runtimeList) {
 
             NiRuntimeNodeVector formRuntimeNodes;
-            if (!formRuntimeNodes.attachModel(root, blockPath, model, insertIntoMap)) {
+            if (!formRuntimeNodes.attachModel(modIndex, root, blockPath, model, insertIntoMap)) {
                 return false;
             }
             auto result = nodeTree.try_emplace(form, std::move(formRuntimeNodes));
@@ -418,7 +421,7 @@ public:
         }
         else {
 
-            if (!runtimeList->attachModel(root, blockPath, model, insertIntoMap)) {
+            if (!runtimeList->attachModel(modIndex, root, blockPath, model, insertIntoMap)) {
                 return false;
             }
 
@@ -429,7 +432,7 @@ public:
 
     }
 
-    bool RegisterRefModel(TESForm* form, TESForm* toAttach, const char* formattedNode, NiNode* root, bool insertIntoMap) {
+    bool RegisterRefModel(UInt32 modIndex, TESForm* form, TESForm* toAttach, const char* formattedNode, NiNode* root, bool insertIntoMap) {
 
         if (!form) return false;
         if (!toAttach) return false;
@@ -459,7 +462,7 @@ public:
         // First-person (Player only)
         if (form->IsPlayer() && playerFirstPersonModel.lookupRefModel(blockPath, model) == nullptr) {
 
-            playerFirstPersonModel.attachRefModel(g_thePlayer->node1stPerson, blockPath, model, formModel, insertIntoMap);
+            playerFirstPersonModel.attachRefModel(modIndex, g_thePlayer->node1stPerson, blockPath, model, formModel, insertIntoMap);
             form->SetJIPFlag(kAttachHookFlags_AttachModel, true);
 
         }
@@ -471,7 +474,7 @@ public:
         if (!runtimeList) {
 
             NiRuntimeNodeVector formRuntimeNodes;
-            if (!formRuntimeNodes.attachRefModel(root, blockPath, model, formModel, insertIntoMap)) {
+            if (!formRuntimeNodes.attachRefModel(modIndex, root, blockPath, model, formModel, insertIntoMap)) {
                 return false;
             }
             auto result = nodeTree.try_emplace(form, std::move(formRuntimeNodes));
@@ -479,7 +482,7 @@ public:
         }
         else {
 
-            if (!runtimeList->attachRefModel(root, blockPath, model, formModel, insertIntoMap)) {
+            if (!runtimeList->attachRefModel(modIndex, root, blockPath, model, formModel, insertIntoMap)) {
                 return false;
             }
 

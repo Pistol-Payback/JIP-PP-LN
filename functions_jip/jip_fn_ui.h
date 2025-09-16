@@ -1673,6 +1673,7 @@ bool Cmd_CloseActiveMenu_Execute(COMMAND_ARGS)
 			if (!menuID) continue;
 			if (menuID >= kMenuType_Min)
 			{
+
 				if (TileMenu *tileMenu = g_tileMenuArray[menuID])
 				{
 					if (FORenderedMenu *renderedMenu = intrfcMgr->renderedMenu; renderedMenu && (renderedMenu->tileMenu == tileMenu))
@@ -1699,13 +1700,15 @@ bool Cmd_CloseActiveMenu_Execute(COMMAND_ARGS)
 				}
 				else if ((menuID == kMenuType_TextEdit) && HOOK_INSTALLED(TextInputClose))
 					UnsetTextInputHooks(TextEditMenu::Get());
+
+				intrfcMgr->menuStack[index] = 0; //Clear off of menu stack
+
 			}
 			else if (menuID == 1)
 			{
 				intrfcMgr->pipBoyMode = 4;
 				intrfcMgr->pipBoyModeCallback = nullptr;
 			}
-			intrfcMgr->menuStack[index] = 0;
 			if (!closeAll) break;
 		}
 		while (--index >= 0);

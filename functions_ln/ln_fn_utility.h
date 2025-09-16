@@ -418,7 +418,8 @@ bool Cmd_SetDefaultMessageTime_Execute(COMMAND_ARGS)
 bool Cmd_Console_Execute(COMMAND_ARGS)
 {
 	char *buffer = GetStrArgBuffer();
-	if (ExtractFormatStringArgs(0, buffer, EXTRACT_ARGS_EX, kCommandInfo_Console.numParams) && JIPScriptRunner::RunScriptSource(buffer, "Console"))
+	if (ExtractFormatStringArgs(0, buffer, EXTRACT_ARGS_EX, kCommandInfo_Console.numParams) && JIPScriptRunner::RunScriptSource(buffer, "Console")) {
 		*result = 1;
+	}
 	return true;
 }

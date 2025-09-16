@@ -896,7 +896,7 @@ namespace JIPScriptRunner
 	void RunScripts(ScriptRunOn runOn1, ScriptRunOn runOn2 = kRunOn_Invalid);
 
 	void __fastcall RunScript(Script *script, int, TESObjectREFR *callingRef);
-	bool __fastcall RunScriptSource(char *scrSource, const char *scrName, bool capture = false);
+	bool RunScriptSource(char* scrSource, const char* scrName, bool capture = false);
 
 	void __fastcall LogCompileError(String &errorStr);
 };

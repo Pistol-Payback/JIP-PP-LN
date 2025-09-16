@@ -465,5 +465,8 @@
     <Natvis Include="p_plus\VectorSortedView.natvis">
       <Filter>pUtilities</Filter>
     </Natvis>
+    <Natvis Include="p_plus\NiTArray.natvis">
+      <Filter>pUtilities</Filter>
+    </Natvis>
   </ItemGroup>
 </Project>

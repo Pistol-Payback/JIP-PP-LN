@@ -1513,7 +1513,7 @@ constexpr ParamInfo kParams_OneForm_OneInt_OneFormatString[] =
 	FORMAT_STRING_PARAMS
 };
 
-constexpr ParamInfo kParams_TwoForms_OneInt_OneFormatString[] =
+constexpr ParamInfo kParams_TwoForms_OneInt_OneOptionalFormatString[] =
 {
 	{kParamType_AnyForm},
 	{kParamType_AnyForm},

@@ -270,39 +270,39 @@ typedef FixedTypeArray<hkpWorldObject*, 0x40> ContactObjects;
 class NiObject : public NiRefObject
 {
 public:
-	/*08*/virtual NiRTTI	*GetType();
-	/*0C*/virtual NiNode	*GetNiNode();	// Returns this
-	/*10*/virtual BSFadeNode	*GetFadeNode();	// Returns this
-	/*14*/virtual BSMultiBoundNode	*GetMultiBoundNode();	// Returns this
-	/*18*/virtual NiGeometry	*GetNiGeometry();	// Returns this
-	/*1C*/virtual NiTriBasedGeom	*GetTriBasedGeom();	// Returns this
-	/*20*/virtual NiTriStrips	*GetTriStrips();	// Returns this
-	/*24*/virtual NiTriShape	*GetTriShape();	// Returns this
-	/*28*/virtual BSSegmentedTriShape	*GetSegmentedTriShape();	// Returns this
-	/*2C*/virtual BSResizableTriShape	*GetResizableTriShape();	// Returns this
-	/*30*/virtual NiParticles	*GetNiParticles();	// Returns this
-	/*34*/virtual NiLines	*GetNiLines();	// Returns this
-	/*38*/virtual bhkNiCollisionObject	*GetCollisionObject();	// Returns this
+	/*08*/virtual NiRTTI					*GetType();
+	/*0C*/virtual NiNode					*GetNiNode();	// Returns this
+	/*10*/virtual BSFadeNode				*GetFadeNode();	// Returns this
+	/*14*/virtual BSMultiBoundNode			*GetMultiBoundNode();	// Returns this
+	/*18*/virtual NiGeometry				*GetNiGeometry();	// Returns this
+	/*1C*/virtual NiTriBasedGeom			*GetTriBasedGeom();	// Returns this
+	/*20*/virtual NiTriStrips				*GetTriStrips();	// Returns this
+	/*24*/virtual NiTriShape				*GetTriShape();	// Returns this
+	/*28*/virtual BSSegmentedTriShape		*GetSegmentedTriShape();	// Returns this
+	/*2C*/virtual BSResizableTriShape		*GetResizableTriShape();	// Returns this
+	/*30*/virtual NiParticles				*GetNiParticles();	// Returns this
+	/*34*/virtual NiLines					*GetNiLines();	// Returns this
+	/*38*/virtual bhkNiCollisionObject		*GetCollisionObject();	// Returns this
 	/*3C*/virtual bhkBlendCollisionObject	*GetBlendCollisionObject();	// Returns this
-	/*40*/virtual bhkRigidBody	*GetRigidBody();	// Returns this
+	/*40*/virtual bhkRigidBody				*GetRigidBody();	// Returns this
 	/*44*/virtual bhkLimitedHingeConstraint	*GetLimitedHingeConstraint();	// Returns this
-	/*48*/virtual NiObject	*Clone(NiObjectCopyInfo *copyInfo);
-	/*4C*/virtual void		LoadBinary(NiStream *stream);
-	/*50*/virtual void		LinkObject(NiStream *stream);
-	/*54*/virtual void		RegisterStreamables(NiStream *stream);
-	/*58*/virtual void		SaveBinary(NiStream *stream);
-	/*5C*/virtual bool		Compare(NiObject *to);
-	/*60*/virtual void		GetViewerStrings(NiTArray<char*> *strings);
-	/*64*/virtual void		AddViewerStrings(NiTArray<char*> *strings);
-	/*68*/virtual void		ProcessClone(NiObjectCopyInfo *copyInfo);
-	/*6C*/virtual void		PostLinkObject(NiStream *stream);
-	/*70*/virtual bool		StreamCanSkip();
-	/*74*/virtual NiRTTI	*GetStreamableRTTI();
-	/*78*/virtual void		SetWorldBound(NiBound *worldBound);
-	/*7C*/virtual UInt32	GetBlockAllocationSize();
-	/*80*/virtual void		Unk_20(void);
-	/*84*/virtual void		Unk_21(UInt32 arg);
-	/*88*/virtual NiControllerManager	*GetControllerManager();	// Returns this
+	/*48*/virtual NiObject					*Clone(NiObjectCopyInfo *copyInfo);
+	/*4C*/virtual void						LoadBinary(NiStream *stream);
+	/*50*/virtual void						LinkObject(NiStream *stream);
+	/*54*/virtual void						RegisterStreamables(NiStream *stream);
+	/*58*/virtual void						SaveBinary(NiStream *stream);
+	/*5C*/virtual bool						Compare(NiObject *to);
+	/*60*/virtual void						GetViewerStrings(NiTArray<char*> *strings);
+	/*64*/virtual void						AddViewerStrings(NiTArray<char*> *strings);
+	/*68*/virtual void						ProcessClone(NiObjectCopyInfo *copyInfo);
+	/*6C*/virtual void						PostLinkObject(NiStream *stream);
+	/*70*/virtual bool						StreamCanSkip();
+	/*74*/virtual NiRTTI					*GetStreamableRTTI();
+	/*78*/virtual void						SetWorldBound(NiBound *worldBound);
+	/*7C*/virtual UInt32					GetBlockAllocationSize();
+	/*80*/virtual void						Unk_20(void);
+	/*84*/virtual void						Unk_21(UInt32 arg);
+	/*88*/virtual NiControllerManager*		GetControllerManager();	// Returns this
 
 	NiObject* __fastcall HasBaseType(const NiRTTI *baseType);
 };
@@ -609,12 +609,16 @@ class NiDefaultAVObjectPalette : public NiObject
 {
 public:
 	/*8C*/virtual NiAVObject	*GetObjectByName(NiFixedString *objName);
-	/*90*/virtual void		Unk_24(void);
-	/*94*/virtual void		SetTarget(NiNode *_target);
-	/*98*/virtual NiNode	*GetTarget();
+	/*90*/virtual void			Unk_24(void);
+	/*94*/virtual void			SetTarget(NiNode *_target);
+	/*98*/virtual NiNode		*GetTarget();
 
 	NiTFixedStringMap<NiAVObject*>	objectsMap;		// 08
-	NiNode							*pTarget;		// 18
+	NiNode*							pTarget;		// 18
+
+	void updatePalette() {
+		return ThisCall(0xA6E960, this);
+	}
 };
 
 // 34
@@ -1693,15 +1697,31 @@ public:
 		return ((*(UInt32**)this)[(0xC >> 2)] == 0x6815C0);
 	}
 
+	//Decoded by Wall_SOGB
+	NiControllerManager* getControllerManager() {
+		return ThisCall<NiControllerManager*>(0xA5C570, this, (NiControllerSequence*)0x11F36AC);
+	}
+
+	bool updatePalette() {
+		if (NiControllerManager* manager = getControllerManager()) {
+			if (manager->defObjPlt) {
+				manager->defObjPlt->updatePalette();
+				return true;
+			}
+		}
+		return false;
+	}
+
 };
 
 // AC
+//When NiNodes are destroyed, parent is set to a nullptr.
 class NiNode : public NiAVObject
 {
 public:
 	/*DC*/virtual void		AddObject(NiAVObject *object, bool firstFree);
 	/*E0*/virtual void		AddObjectAt(UInt32 index, NiAVObject *object);
-	/*E4*/virtual void		RemoveObject2(NiAVObject *toRemove, NiAVObject **arg2);
+	/*E4*/virtual void		RemoveObject2(NiAVObject *toRemove, NiAVObject*& arg2);
 	/*E8*/virtual void		RemoveObject(NiAVObject *toRemove);		//	Calls RemoveObject2 with arg2 as ptr to NULL
 	/*EC*/virtual void		RemoveNthObject2(UInt32 index, NiAVObject **arg2);
 	/*F0*/virtual void		RemoveNthObject(UInt32 index);			//	Calls RemoveNthObject2 with arg2 as ptr to NULL
@@ -1740,9 +1760,52 @@ public:
 
 //------------------------------ Plugins+ ------------------------------
 
+	inline int getIndex() const
+	{
+		if (!m_parent) return -1;
+
+		int i = 0;
+		for (NiAVObject* child : m_parent->m_children) {  // forward scan
+			if (child == this) return i;
+			++i;
+		}
+		return -1;
+	}
+
+	void replaceMe(NiAVObject* replacement)
+	{
+
+		if (this == replacement) {
+			return;
+		}
+
+		if (!m_parent || !replacement) return;
+
+		NiNode* parent = m_parent;
+
+		const int idx = getIndex();
+		if (idx < 0) return;
+
+		// Bind the slot by reference so we can swap safely.
+		NiAVObject*& entry = parent->m_children[static_cast<UInt32>(idx)];
+
+		// Pin replacement FIRST to survive any destruction.
+		replacement->incrementRef();
+		entry = replacement;
+
+		// release old (may delete a subtree).
+		this->m_parent = nullptr;
+		this->decrementRef();
+
+		if (replacement) replacement->m_parent = parent; //We do this last, because subtree parents are nulled after destruction.
+
+	}
+
 	void AddPointLights();
 	NiAVObject* DeepSearchByName(const NiFixedString& nameStr);	//	str of NiString
 	NiAVObject* DeepSearchByName(const char* blockName);
+
+	NiAVObject* findParentNode(const NiFixedString& parentName, NiNode* stopAt);
 
 	NiAVObject* DeepSearchByPath(const char* blockPath);
 	NiAVObject* DeepSearchByPath(const NiBlockPathView& blockPath);

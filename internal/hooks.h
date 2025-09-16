@@ -1069,13 +1069,14 @@ void __fastcall MenuHandleClickHook(Menu *menu, int, int tileID, Tile *clickedTi
 				CallFunction(*script, nullptr, 3, menu->id, tileID, clickedTile->name.m_data);
 		}
 	}
-	if (!clickEvent.idsMap().Empty())
-		if (EventCallbackScripts *callbacks = clickEvent.idsMap().GetPtr(tileID))
+	if (!clickEvent.idsMap().Empty()) {
+		if (EventCallbackScripts* callbacks = clickEvent.idsMap().GetPtr(tileID))
 		{
-			const char *tileName = clickedTile ? clickedTile->name.m_data : "";
+			const char* tileName = clickedTile ? clickedTile->name.m_data : "";
 			for (auto script = callbacks->BeginCp(); script; ++script)
 				CallFunction(*script, nullptr, 3, menu->id, tileID, tileName);
 		}
+	}
 	return clickEvent.funcPtr(menu, tileID, clickedTile);
 }
 

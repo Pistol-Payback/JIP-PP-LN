@@ -1291,7 +1291,7 @@ namespace JIPScriptRunner
 		if (eventList) xScript->eventList = eventList;
 	}
 
-	bool __fastcall RunScriptSource(char *scrSource, const char *scrName, bool capture)
+	bool RunScriptSource(char *scrSource, const char *scrName, bool capture)
 	{
 		StackObject<Script> tempScript;
 		bool success = tempScript->Init(scrSource, scrName);

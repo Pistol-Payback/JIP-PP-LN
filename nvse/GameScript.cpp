@@ -24,7 +24,7 @@ bool Script::Compile(const char *scrName)
 {
 	ScriptBuffer scrBuffer;
 	scrBuffer.scriptText = text;
-	scrBuffer.runtimeMode = 0;
+	scrBuffer.runtimeMode = 1; //kGameConsole
 	scrBuffer.scriptName.Set(scrName);
 	scrBuffer.partialScript = true;
 	scrBuffer.currScript = this;

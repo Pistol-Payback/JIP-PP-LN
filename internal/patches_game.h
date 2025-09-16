@@ -1,4 +1,5 @@
 #pragma once
+
 #include "p_plus/GamePatchesINI.hpp"
 
 bool EnsureIniWithDefaults()

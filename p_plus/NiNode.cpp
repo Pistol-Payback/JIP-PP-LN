@@ -482,6 +482,27 @@ NiAVObject* NiNode::DeepSearchByPathIter(const NiBlockPathView& blockPath, uint3
 	return bestMatch;
 }
 
+NiAVObject* NiNode::findParentNode(const NiFixedString& parentName, NiNode* stopAt)
+{
+	if (!parentName.getPtr())
+		return nullptr;
+
+	NiNode* childNode = this;
+
+	while (childNode && childNode != stopAt) {
+		NiNode* parent = childNode->m_parent;
+		if (!parent)
+			return nullptr;
+
+		if (parent->m_blockName == parentName)
+			return parent;
+
+		childNode = parent;
+	}
+
+	return nullptr;
+}
+
 NiAVObject* NiNode::DeepSearchByName(const char* blockName)
 {
 
@@ -510,7 +531,7 @@ NiAVObject* NiNode::GetBlockByName(const char* nameStr) const noexcept	//	str of
 
 NiAVObject* NiNode::DeepSearchByName(const NiFixedString& nameStr)
 {
-	if (!nameStr.CStr() || !*nameStr.CStr())
+	if (!nameStr.getPtr())
 		return nullptr;
 
 	// check ourselves first

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<!-- NiTArray<T> -->
+	<Type Name="NiTArray&lt;*&gt;">
+		<!-- Compact header in the watch window -->
+		<DisplayString>size={firstFreeEntry} cap={capacity} grow={growSize} data={data}</DisplayString>
+		<Expand HideRawView="true">
+			<!-- Useful metadata at the top -->
+			<Item Name="size">firstFreeEntry</Item>
+			<Item Name="capacity">capacity</Item>
+			<Item Name="growSize">growSize</Item>
+			<Item Name="data">data</Item>
+
+			<!-- The actual elements -->
+			<ArrayItems>
+				<Size>firstFreeEntry</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<!-- Optional: specialize char* to show strings nicely (VS usually does this already) -->
+	<Type Name="NiTArray&lt;char*&gt;">
+		<DisplayString>size={firstFreeEntry} cap={capacity} (char* array)</DisplayString>
+		<Expand HideRawView="true">
+			<ArrayItems>
+				<Size>firstFreeEntry</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+	<Type Name="NiTArray&lt;const char*&gt;">
+		<DisplayString>size={firstFreeEntry} cap={capacity} (const char* array)</DisplayString>
+		<Expand HideRawView="true">
+			<ArrayItems>
+				<Size>firstFreeEntry</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<!-- NiTArray<T>::Iterator -->
+	<Type Name="NiTArray&lt;*&gt;::Iterator">
+		<DisplayString>remaining={count} current={pData}</DisplayString>
+		<Expand HideRawView="true">
+			<Item Name="current">*pData</Item>
+			<ArrayItems>
+				<Size>count</Size>
+				<ValuePointer>pData</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+</AutoVisualizer>

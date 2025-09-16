@@ -4,8 +4,8 @@ DEFINE_COMMAND_PLUGIN(AddItemAlt, 1, kParams_OneItemOrList_OneOptInt_OneOptFloat
 DEFINE_COMMAND_PLUGIN(GetValueAlt, 0, kParams_OneOptionalObjectID);
 DEFINE_COMMAND_PLUGIN(SetValueAlt, 0, kParams_OneObjectID_OneInt);
 DEFINE_COMMAND_PLUGIN(RemoveItemTarget, 1, kParams_OneItemOrList_OneContainer_TwoOptionalInts);
-DEFINE_COMMAND_PLUGIN(GetWeaponRefModFlags, 1, nullptr);
-DEFINE_COMMAND_PLUGIN(SetWeaponRefModFlags, 1, kParams_OneInt);
+DEFINE_COMMAND_ALT_PLUGIN(GetWeaponRefModFlags, GetWeaponModFlags, 1, nullptr);
+DEFINE_COMMAND_ALT_PLUGIN(SetWeaponRefModFlags, SetWeaponModFlags, 1, kParams_OneInt);
 DEFINE_COMMAND_PLUGIN(GetItemRefCurrentHealth, 1, kParams_OneOptionalInt);
 DEFINE_COMMAND_PLUGIN(SetItemRefCurrentHealth, 1, kParams_OneFloat_OneOptionalInt);
 DEFINE_COMMAND_PLUGIN(SetHotkeyItemRef, 1, kParams_OneInt);
@@ -87,14 +87,22 @@ bool Cmd_SetWeaponRefModFlags_Execute(COMMAND_ARGS)
 	UInt32 flags;
 	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &flags) || (flags > 7))
 		return true;
-	InventoryRef *invRef = InventoryRefGetForID(thisObj->refID);
-	if (!invRef || NOT_ID(invRef->type, TESObjectWEAP))
+
+	InventoryRef* invRef = InventoryRefGetForID(thisObj->refID);
+	ExtraDataList* xData = invRef ? invRef->xData : &thisObj->extraDataList;
+	TESObjectWEAP* baseform = invRef ? (TESObjectWEAP*)invRef->type : (TESObjectWEAP*)thisObj->baseForm;
+
+	if (!baseform || NOT_ID(baseform, TESObjectWEAP))
 		return true;
-	TESObjectIMOD **mods = ((TESObjectWEAP*)invRef->type)->itemMod;
+
+	TESObjectIMOD **mods = baseform->itemMod;
+
+	//Remove flags for invalid item forms
 	if (!mods[0]) flags &= ~1;
 	if (!mods[1]) flags &= ~2;
 	if (!mods[2]) flags &= ~4;
-	if (ExtraDataList *xData = invRef->xData)
+
+	if (xData)
 	{
 		if (auto xModFlags = GetExtraType(xData, ExtraWeaponModFlags))
 		{

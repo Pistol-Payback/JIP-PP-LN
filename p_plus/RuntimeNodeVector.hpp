@@ -301,61 +301,61 @@ struct NiRuntimeNodeVector {
         return nullptr;
     }
 
-    bool emplaceParentNode(NiBlockPathView& parentPath, const NiFixedString& node, NiBlockPathBuilder&& fullPath) {
-        if (lookupNode(parentPath, node)) { return false; }
-        allPaths.emplace(NiBlockPathBase::createCopy(parentPath), node, NiToken(IndexLinkedList(parentPath.back())), fullPath.toStaticPath());
+    bool emplaceParentNode(UInt32 modIndex, NiBlockPathView& childPath, const NiFixedString& node, NiBlockPathBuilder&& fullPath) {
+        if (lookupNode(childPath, node)) { return false; }
+        allPaths.emplace(modIndex, NiBlockPathBase::createCopy(childPath), node, NiToken(IndexLinkedList(childPath.back())), fullPath.toStaticPath());
         return true;
     }
 
-    bool emplaceParentNode(NiBlockPathView& parentPath, const NiFixedString& node) {
-        if (lookupNode(parentPath, node)) { return false; }
-        allPaths.emplace(NiBlockPathBase::createCopy(parentPath), node, NiToken(IndexLinkedList(parentPath.back())), NiBlockPathStatic());
+    bool emplaceParentNode(UInt32 modIndex, NiBlockPathView& childPath, const NiFixedString& node) {
+        if (lookupNode(childPath, node)) { return false; }
+        allPaths.emplace(modIndex, NiBlockPathBase::createCopy(childPath), node, NiToken(IndexLinkedList(childPath.back())), NiBlockPathStatic());
         return true;
     }
 
-    bool emplaceChildNode(NiBlockPathView& parentPath, const NiFixedString& node, NiBlockPathBuilder&& fullPath) {
+    bool emplaceChildNode(UInt32 modIndex, NiBlockPathView& parentPath, const NiFixedString& node, NiBlockPathBuilder&& fullPath) {
         if (lookupNode(parentPath, node)) { return false; }
-        allPaths.emplace(NiBlockPathBase::createCopy(parentPath), node, NiToken(), fullPath.toStaticPath());
+        allPaths.emplace(modIndex, NiBlockPathBase::createCopy(parentPath), node, NiToken(), fullPath.toStaticPath());
         return true;
     }
 
-    bool emplaceChildNode(NiBlockPathView& parentPath, const NiFixedString& node) {
+    bool emplaceChildNode(UInt32 modIndex, NiBlockPathView& parentPath, const NiFixedString& node) {
         if (lookupNode(parentPath, node)) { return false; }
-        allPaths.emplace(NiBlockPathBase::createCopy(parentPath), node, NiToken(), NiBlockPathStatic());
+        allPaths.emplace(modIndex, NiBlockPathBase::createCopy(parentPath), node, NiToken(), NiBlockPathStatic());
         return true;
     }
 
-    bool emplaceModel(NiBlockPathView& parentPath, ModelPath& modelPath, const NiFixedString& modelRootNode, NiBlockPathBuilder&& fullPath) {
+    bool emplaceModel(UInt32 modIndex, NiBlockPathView& parentPath, ModelPath& modelPath, const NiFixedString& modelRootNode, NiBlockPathBuilder&& fullPath) {
         if (lookupModel(parentPath, modelPath)) { return false; }
-        allPaths.emplace(NiBlockPathBase::createCopy(parentPath), modelRootNode, NiToken(modelPath), fullPath.toStaticPath());
+        allPaths.emplace(modIndex, NiBlockPathBase::createCopy(parentPath), modelRootNode, NiToken(modelPath), fullPath.toStaticPath());
         return true;
     }
 
-    bool emplaceModel(NiBlockPathView& parentPath, ModelPath& modelPath) {
+    bool emplaceModel(UInt32 modIndex, NiBlockPathView& parentPath, ModelPath& modelPath) {
         if (lookupModel(parentPath, modelPath)) { return false; }
-        allPaths.emplace(NiBlockPathBase::createCopy(parentPath), NiFixedString(), NiToken(modelPath), NiBlockPathStatic());
+        allPaths.emplace(modIndex, NiBlockPathBase::createCopy(parentPath), NiFixedString(), NiToken(modelPath), NiBlockPathStatic());
         return true;
     }
 
-    bool emplaceRefModel(NiBlockPathView& parentPath, RefModel& refModel, const NiFixedString& modelRootNode, NiBlockPathBuilder&& fullPath) {
+    bool emplaceRefModel(UInt32 modIndex, NiBlockPathView& parentPath, RefModel& refModel, const NiFixedString& modelRootNode, NiBlockPathBuilder&& fullPath) {
         if (lookupRefModel(parentPath, refModel)) { return false; }
-        allPaths.emplace(NiBlockPathBase::createCopy(parentPath), modelRootNode, NiToken(refModel), fullPath.toStaticPath());
+        allPaths.emplace(modIndex, NiBlockPathBase::createCopy(parentPath), modelRootNode, NiToken(refModel), fullPath.toStaticPath());
         return true;
     }
 
-    bool emplaceRefModel(NiBlockPathView& parentPath, RefModel& refModel) {
+    bool emplaceRefModel(UInt32 modIndex, NiBlockPathView& parentPath, RefModel& refModel) {
         if (lookupRefModel(parentPath, refModel)) { return false; }
-        allPaths.emplace(NiBlockPathBase::createCopy(parentPath), NiFixedString(), NiToken(refModel), NiBlockPathStatic());
+        allPaths.emplace(modIndex, NiBlockPathBase::createCopy(parentPath), NiFixedString(), NiToken(refModel), NiBlockPathStatic());
         return true;
     }
 
-    bool attachModel(NiNode* root, NiBlockPathView& attachPath, ModelPath& modelPath, bool insertIntoMap) {
+    bool attachModel(UInt32 modIndex, NiNode* root, NiBlockPathView& attachPath, ModelPath& modelPath, bool insertIntoMap) {
 
         if (!root) {
             if (!insertIntoMap) {
                 return false;
             }
-            return emplaceModel(attachPath, modelPath);
+            return emplaceModel(modIndex, attachPath, modelPath);
         }
 
         NiBlockPathBuilder builderPath;
@@ -380,9 +380,10 @@ struct NiRuntimeNodeVector {
             toAttach->AddPointLights();
             node->AddObject(toAttach, true);
             node->UpdateTransformAndBounds(kNiUpdateData);
+            node->updatePalette();
 
             if (insertIntoMap) {
-                return emplaceModel(attachPath, modelPath, toAttach->m_blockName, std::move(builderPath));
+                return emplaceModel(modIndex, attachPath, modelPath, toAttach->m_blockName, std::move(builderPath));
             }
 
         }
@@ -391,13 +392,13 @@ struct NiRuntimeNodeVector {
 
     }
 
-    bool attachRefModel(NiNode* root, NiBlockPathView& attachPath, RefModel& refModel, ModelTemp& formModel, bool insertIntoMap) {
+    bool attachRefModel(UInt32 modIndex, NiNode* root, NiBlockPathView& attachPath, RefModel& refModel, ModelTemp& formModel, bool insertIntoMap) {
 
         if (!root) {
             if (!insertIntoMap) {
                 return false;
             }
-            return emplaceRefModel(attachPath, refModel);
+            return emplaceRefModel(modIndex, attachPath, refModel);
         }
 
         NiBlockPathBuilder builderPath;
@@ -412,9 +413,10 @@ struct NiRuntimeNodeVector {
 
             node->AddObject(toAttach, true);
             node->UpdateTransformAndBounds(kNiUpdateData);
+            node->updatePalette();
 
             if (insertIntoMap) {
-                return emplaceRefModel(attachPath, refModel, toAttach->m_blockName, std::move(builderPath));
+                return emplaceRefModel(modIndex, attachPath, refModel, toAttach->m_blockName, std::move(builderPath));
             }
 
         }
@@ -423,7 +425,7 @@ struct NiRuntimeNodeVector {
 
     }
 
-    bool attachNode(NiNode* root, NiBlockPathView& attachPath, const char* nodeName, bool insertIntoMap) {
+    bool attachNode(UInt32 modIndex, NiNode* root, NiBlockPathView& attachPath, const char* nodeName, bool insertIntoMap) {
 
         if (!nodeName) return false;
 
@@ -436,10 +438,10 @@ struct NiRuntimeNodeVector {
 
             if (nodeName[0] == '^') {
                 //Skip the ^ parent syntax
-                return emplaceParentNode(attachPath, NiFixedString(nodeName + 1));
+                return emplaceParentNode(modIndex, attachPath, NiFixedString(nodeName + 1));
             }
             else {
-                return emplaceChildNode(attachPath, NiFixedString(nodeName));
+                return emplaceChildNode(modIndex, attachPath, NiFixedString(nodeName));
             }
         }
 
@@ -468,12 +470,13 @@ struct NiRuntimeNodeVector {
             newParent->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
 
             grandparent->UpdateTransformAndBounds(kNiUpdateData);
+            grandparent->updatePalette();
 
             // use the parent path
             fullPath.pop();
 
             if (insertIntoMap) {
-                return emplaceParentNode(attachPath, name, std::move(fullPath));
+                return emplaceParentNode(modIndex, attachPath, name, std::move(fullPath));
             }
 
         }
@@ -488,10 +491,11 @@ struct NiRuntimeNodeVector {
 
             toAttachTo->AddObject(child, true);
             toAttachTo->UpdateTransformAndBounds(kNiUpdateData);
+            toAttachTo->updatePalette();
             child->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
 
             if (insertIntoMap) {
-                return emplaceChildNode(attachPath, name, std::move(fullPath));
+                return emplaceChildNode(modIndex, attachPath, name, std::move(fullPath));
             }
 
         }
@@ -659,31 +663,43 @@ struct NiRuntimeNodeVector {
     NiAVObject* findAndUpdateNode(NiRuntimeNode& runtimeNode, NiNode& root, bool& updated) {
 
         NiAVObject* found = (NiNode*)root.DeepSearchByPath(NiBlockPathBase(runtimeNode.cachedPath, runtimeNode.node));
-        if (!found || found->m_blockName != runtimeNode.node) { //Didin't find full path, lets rebuild the cache
+        if (!found || found->m_blockName != runtimeNode.node) { //Didn't find full path, lets rebuild the cache
 
             NiNode* subSearch = &root;
-
-            /*
-            if (found && found->isNiNode()) {
-                toFind.cachedPath.shinkToNode(found);
-                subSearch = (NiNode*)found; //Continue where search by path left off.
-            }
-            */
-
             NiBlockPathBuilder builderPath;
-            NiNode* node = (NiNode*)subSearch->BuildNiPath(runtimeNode.sparsePath, builderPath); //Rebuild path
-            if (!node || !node->isNiNode()) {
-                runtimeNode.cachedPath.clear(); //Bad runtime node, mark for delete
-                updated = true;
-                return nullptr;
-            }
 
-            if (runtimeNode.cachedPath != builderPath) {
+            if (runtimeNode.value.isLink()) { //parent node
+
+                NiBlockPathBuilder builderPath;
+                NiNode* child = (NiNode*)subSearch->BuildNiPath(runtimeNode.sparsePath, builderPath);
+                if (!child || child == &root) {
+                    runtimeNode.cachedPath.clear(); //Bad runtime node, mark for delete
+                    updated = true;
+                    return nullptr;
+                }
+
+                NiNode* grandparent = child->m_parent;
+                builderPath.pop(); //Use grandparent
                 runtimeNode.cachedPath = std::move(builderPath.toStaticPath()); //Update cache
-                updated = true;
-            }
 
-            return node->DeepSearchBySparsePath(NiBlockPathView(&runtimeNode.node, 1));
+                return grandparent->findParentNode(runtimeNode.node, &root);
+
+            }
+            else { //Normal node
+                NiNode* node = (NiNode*)subSearch->BuildNiPath(runtimeNode.sparsePath, builderPath); //Rebuild path
+                if (!node || !node->isNiNode()) {
+                    runtimeNode.cachedPath.clear(); //Bad runtime node, mark for delete
+                    updated = true;
+                    return nullptr;
+                }
+
+                if (runtimeNode.cachedPath != builderPath) {
+                    runtimeNode.cachedPath = std::move(builderPath.toStaticPath()); //Update cache
+                    updated = true;
+                }
+
+                return node->DeepSearchBySparsePath(NiBlockPathView(&runtimeNode.node, 1));
+            }
 
         }
 
@@ -719,12 +735,7 @@ struct NiRuntimeNodeVector {
 
                     //Restore child
                     NiNode* grandParent = insertedParent->m_parent;
-
-                    //Grab the first child of this path, its most likely going to be the original child
-                    NiNode* child = const_cast<NiNode*>(builder.parents[0].node);
-
-                    grandParent->AddObject(child, true); //Orphans insertedParent
-                    //grandParent->UpdateTransformAndBounds(kNiUpdateData);
+                    insertedParent->replaceMe(originalChild); //Swaps insertedParent with originalChild
 
 
                 }
@@ -925,7 +936,7 @@ struct NiRuntimeNodeVector {
 
         }
 
-        if (grandparent->hasChildNode(toAttach.node)) {
+        if (child->findParentNode(toAttach.node, &root)) {
             return true;
         }
 
