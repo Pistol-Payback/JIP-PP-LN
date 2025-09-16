@@ -1434,7 +1434,7 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 	REG_CMD(CopyRuntimeNodes);
 	REG_CMD(HasRuntimeNode);
 	REG_CMD_ARR(GetRuntimeNodes);
-	REG_CMD(EraseRuntimeNodes);
+	REG_CMD(ClearRuntimeNodes);
 
 	REG_CMD(RefreshInventoryWeight);
 

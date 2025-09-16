@@ -110,7 +110,7 @@ DEFINE_COMMAND_PLUGIN(AttachFormModel, false, kParams_TwoForms_OneInt_OneOptiona
 DEFINE_COMMAND_PLUGIN(GetRuntimeNodes, false, kParams_OneForm);
 DEFINE_COMMAND_PLUGIN_EXP(HasRuntimeNode, false, kParams_OneForm_OneString_OneOptionalBasicType);
 DEFINE_COMMAND_PLUGIN_EXP(CopyRuntimeNodes, false, kParams_TwoForms_OneOptionalInt);
-DEFINE_COMMAND_PLUGIN_EXP(EraseRuntimeNodes, false, kParams_OneForm_OneOptionalInt);
+DEFINE_COMMAND_PLUGIN_EXP(ClearRuntimeNodes, false, kParams_OneForm_OneOptionalInt);
 
 DEFINE_COMMAND_PLUGIN_EXP(ClampToGround, false, nullptr);
 
@@ -1774,7 +1774,7 @@ bool Cmd_CopyRuntimeNodes_Execute(COMMAND_ARGS)
 	return true;
 }
 
-bool Cmd_EraseRuntimeNodes_Execute(COMMAND_ARGS)
+bool Cmd_ClearRuntimeNodes_Execute(COMMAND_ARGS)
 {
 
 	PluginExpressionEvaluator eval(PASS_COMMAND_ARGS);
