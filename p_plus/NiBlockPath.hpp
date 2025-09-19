@@ -364,6 +364,25 @@ public:
     friend NiBlockPathBase;
     friend NiBlockPathStatic;
 
+    inline std::string toString(bool leadingSlash = false) const {
+        if (_length == 0) return {};
+
+        const uint32_t n = _length;
+        const size_t separators = leadingSlash ? n : (n - 1);
+
+        size_t chars = separators;
+        for (uint32_t i = 0; i < n; ++i) chars += _nodes[i].Length();
+
+        std::string out;
+        out.reserve(chars);
+
+        for (uint32_t i = 0; i < n; ++i) {
+            if (leadingSlash || i) out.push_back('\\');
+            out.append(_nodes[i].CStr());
+        }
+        return out;
+    }
+
 };
 
 

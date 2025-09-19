@@ -1,5 +1,9 @@
 ﻿#pragma once
 #include "p_plus/NiFixedString.hpp"
+#include <type_traits>
+#include <cstdint>
+#include <cstddef>
+#include <cassert>
 
 // forward‐declare our real implementation
 void __fastcall InitPointLights_Impl(NiNode* rootNode, NiNode* sentinel);
@@ -270,21 +274,22 @@ typedef FixedTypeArray<hkpWorldObject*, 0x40> ContactObjects;
 class NiObject : public NiRefObject
 {
 public:
+
 	/*08*/virtual NiRTTI					*GetType();
-	/*0C*/virtual NiNode					*GetNiNode();	// Returns this
-	/*10*/virtual BSFadeNode				*GetFadeNode();	// Returns this
-	/*14*/virtual BSMultiBoundNode			*GetMultiBoundNode();	// Returns this
-	/*18*/virtual NiGeometry				*GetNiGeometry();	// Returns this
-	/*1C*/virtual NiTriBasedGeom			*GetTriBasedGeom();	// Returns this
-	/*20*/virtual NiTriStrips				*GetTriStrips();	// Returns this
-	/*24*/virtual NiTriShape				*GetTriShape();	// Returns this
-	/*28*/virtual BSSegmentedTriShape		*GetSegmentedTriShape();	// Returns this
-	/*2C*/virtual BSResizableTriShape		*GetResizableTriShape();	// Returns this
-	/*30*/virtual NiParticles				*GetNiParticles();	// Returns this
-	/*34*/virtual NiLines					*GetNiLines();	// Returns this
-	/*38*/virtual bhkNiCollisionObject		*GetCollisionObject();	// Returns this
-	/*3C*/virtual bhkBlendCollisionObject	*GetBlendCollisionObject();	// Returns this
-	/*40*/virtual bhkRigidBody				*GetRigidBody();	// Returns this
+	/*0C*/virtual NiNode					*GetNiNode();					// Returns this
+	/*10*/virtual BSFadeNode				*GetFadeNode();					// Returns this
+	/*14*/virtual BSMultiBoundNode			*GetMultiBoundNode();			// Returns this
+	/*18*/virtual NiGeometry				*GetNiGeometry();				// Returns this
+	/*1C*/virtual NiTriBasedGeom			*GetTriBasedGeom();				// Returns this
+	/*20*/virtual NiTriStrips				*GetTriStrips();				// Returns this
+	/*24*/virtual NiTriShape				*GetTriShape();					// Returns this
+	/*28*/virtual BSSegmentedTriShape		*GetSegmentedTriShape();		// Returns this
+	/*2C*/virtual BSResizableTriShape		*GetResizableTriShape();		// Returns this
+	/*30*/virtual NiParticles				*GetNiParticles();				// Returns this
+	/*34*/virtual NiLines					*GetNiLines();					// Returns this
+	/*38*/virtual bhkNiCollisionObject		*GetCollisionObject();			// Returns this
+	/*3C*/virtual bhkBlendCollisionObject	*GetBlendCollisionObject();		// Returns this
+	/*40*/virtual bhkRigidBody				*GetRigidBody();				// Returns this
 	/*44*/virtual bhkLimitedHingeConstraint	*GetLimitedHingeConstraint();	// Returns this
 	/*48*/virtual NiObject					*Clone(NiObjectCopyInfo *copyInfo);
 	/*4C*/virtual void						LoadBinary(NiStream *stream);
@@ -305,6 +310,7 @@ public:
 	/*88*/virtual NiControllerManager*		GetControllerManager();	// Returns this
 
 	NiObject* __fastcall HasBaseType(const NiRTTI *baseType);
+
 };
 
 enum InterpKeyType
@@ -1760,6 +1766,14 @@ public:
 
 //------------------------------ Plugins+ ------------------------------
 
+	inline void attachRuntimeNode(NiAVObject* runtimeNode) {
+		runtimeNode->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
+		this->AddObject(runtimeNode, true);
+	}
+
+	inline void detachRuntimeNode();
+	inline void collapseRuntimeNode();
+
 	inline int getIndex() const
 	{
 		if (!m_parent) return -1;
@@ -1805,10 +1819,10 @@ public:
 	NiAVObject* DeepSearchByName(const NiFixedString& nameStr);	//	str of NiString
 	NiAVObject* DeepSearchByName(const char* blockName);
 
-	NiAVObject* findParentNode(const NiFixedString& parentName, NiNode* stopAt);
+	NiNode* findParentNode(const NiFixedString& parentName, NiNode* stopAt);
 
-	NiAVObject* DeepSearchByPath(const char* blockPath);
-	NiAVObject* DeepSearchByPath(const NiBlockPathView& blockPath);
+	NiAVObject*	DeepSearchByPath(const char* blockPath, uint16_t& matchedDepth);
+	NiAVObject* DeepSearchByPath(const NiBlockPathView& blockPath, uint16_t& matchedDepth);
 
 	NiAVObject* DeepSearchBySparsePath(const NiBlockPathView& blockPath);
 
@@ -1819,7 +1833,8 @@ public:
 	void AddSuffixToAllChildren(const char* suffix);
 
 	void removeRuntimeNode(const NiRuntimeNode& toRemove);
-	void updateCache(NiRuntimeNodeVector* runtimeNodesVector);
+	void removeRuntimeParent(const NiRuntimeNode& toRemove);
+	void removeRuntimeChild(const NiRuntimeNode& toRemove);
 	void removeAllRuntimeNodes(NiRuntimeNodeVector* runtimeNodesVector);
 	void attachAllRuntimeNodes(NiRuntimeNodeVector* runtimeNodesVector);
 
@@ -1846,12 +1861,16 @@ public:
 	}
 
 	bool hasChildNode(const NiFixedString& name) const {
+		return getDirectChildNode(name) != nullptr;
+	}
+
+	inline NiAVObject* getDirectChildNode(const NiFixedString& name) const {
 		for (auto child : m_children) {
 			if (child && child->m_blockName == name) {
-				return true;
+				return child;
 			}
 		}
-		return false;
+		return nullptr;
 	}
 
 	//----------------------------------------------------------------------  
@@ -1880,11 +1899,137 @@ public:
 		InitPointLights_Impl(this, root);
 	}
 
+	// ===========================
+	// Horizontal traversal (BFS)
+	// ===========================
+	// Level-order: visit root, then all children, then grandchildren, etc.
+	// Queue holds NiNode* to expand; we still visit ALL NiAVObject children.
+	// The callback returns bool: true = continue, false = early stop.
+	template <class Fn>
+	inline bool TraverseHorizontal64(Fn&& fn) {
+		return TraverseHorizontal64Impl(this, std::forward<Fn>(fn));
+	}
+	template <class Fn>
+	inline bool TraverseHorizontal64(Fn&& fn) const {
+		return TraverseHorizontal64Impl(const_cast<NiNode*>(this), std::forward<Fn>(fn));
+	}
+
+	template <class Fn>
+	inline bool TraverseVertical64(Fn&& fn) {
+		return TraverseVertical64Impl(this, std::forward<Fn>(fn));
+	}
+	template <class Fn>
+	inline bool TraverseVertical64(Fn&& fn) const {
+		return TraverseVertical64Impl(const_cast<NiNode*>(this), std::forward<Fn>(fn));
+	}
+
+	inline NiAVObject* findFirstValidChild() const {
+
+		NiAVObject* result = nullptr;
+		this->TraverseHorizontal64([&](NiAVObject* child) {
+			if (child) {
+				result = child;
+				return false; // stop traversal on first match
+			}
+			return true; // keep going
+			});
+
+		return result;
+	}
+
 private:
 
-	NiAVObject* DeepSearchByNameIter(const NiFixedString& target) const;
+	// Tunables (stack/queue sizes).
+	inline static constexpr std::size_t kMaxTraversalDepth = 64;                 // DFS: max stack frames
+	inline static constexpr std::size_t kMaxTraversalQueue = kMaxTraversalDepth; // BFS: max queued NiNodes
+
+	struct Frame {
+		NiNode* node;
+		std::uint8_t nextChild;
+	};
+
+	template <class Fn>
+	static bool TraverseVertical64Impl(NiNode* root, Fn&& fn) {
+
+		if (!root) return true;
+		if (!fn(root)) return false;
+
+		Frame stack[kMaxTraversalDepth];
+		std::size_t sp = 0;
+		stack[sp++] = { root, 0 };
+
+		while (sp) {
+			Frame& fr = stack[sp - 1];
+			NiNode* cur = fr.node;
+
+			const std::uint8_t count = cur->m_children.firstFreeEntry;
+			if (fr.nextChild < count) {
+				NiAVObject* child = cur->m_children[fr.nextChild++]; // requires const operator[] overload
+				if (!fn(child)) return false;
+				if (!child) continue;
+				if (child->isNiNode()) {   // requires GetNiNode() const
+					if (sp < kMaxTraversalDepth) stack[sp++] = { child, 0 };
+					else assert(false && "DFS depth overflow");
+				}
+			}
+			else {
+				--sp;
+			}
+		}
+		return true;
+	}
+
+	template <class Fn>
+	static bool TraverseHorizontal64Impl(NiNode* root, Fn&& fn) {
+
+		if (!root) return true;
+
+		// Visit root first (level-order, root included)
+		if (!fn(root)) return false;
+
+		// Fixed-size ring buffer for nodes to expand
+		NiNode* queue[kMaxTraversalQueue];
+		std::size_t head = 0, tail = 0, cnt = 0;
+
+		auto push = [&](NiNode* n) {
+			if (cnt >= kMaxTraversalQueue) { assert(false && "BFS queue overflow"); return false; }
+			queue[tail] = n;
+			tail = (tail + 1) % kMaxTraversalQueue;
+			++cnt;
+			return true;
+			};
+		auto pop = [&]() -> NiNode* {
+			if (!cnt) return nullptr;
+			NiNode* n = queue[head];
+			head = (head + 1) % kMaxTraversalQueue;
+			--cnt;
+			return n;
+			};
+
+		// Seed with root for child expansion (we already visited root)
+		push(root);
+
+		while (cnt) {
+			NiNode* cur = pop();
+			if (!cur) continue;
+
+			const std::uint8_t childCount = cur->m_children.firstFreeEntry;
+			for (std::uint8_t i = 0; i < childCount; ++i) {
+				NiAVObject* child = cur->m_children[i];
+				// Visit child at this breadth
+				if (!fn(child)) return false; //Let this pass null children
+
+				if (!child) continue;
+				// Queue child nodes for the next breadth
+				if (child->isNiNode()) {
+					push(static_cast<NiNode*>(child));
+				}
+			}
+		}
+		return true;
+	}
+
 	NiAVObject* BuildNiPathIter(const NiBlockPathView& blockPath, NiBlockPathBuilder& output) const;
-	NiAVObject* DeepSearchByPathIter(const NiBlockPathView& blockPath, uint32_t startIdx);
 
 	//----------------------------------------------------------------------  
 	// Impl for vector‐building  

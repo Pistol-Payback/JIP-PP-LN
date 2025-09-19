@@ -38,12 +38,6 @@ void NiNode::DownwardsInitPointLights(NiNode* root)
 
 }
 
-void NiNode::updateCache(NiRuntimeNodeVector* runtimeNodesVector) {
-	if (runtimeNodesVector) {
-		runtimeNodesVector->updateCache(this);
-	}
-}
-
 void NiNode::removeAllRuntimeNodes(NiRuntimeNodeVector* runtimeNodesVector) {
 	if (runtimeNodesVector) {
 		runtimeNodesVector->removeAllRuntimeNodes(this);
@@ -58,66 +52,109 @@ void NiNode::attachAllRuntimeNodes(NiRuntimeNodeVector* runtimeNodesVector) {
 
 void NiNode::removeRuntimeNode(const NiRuntimeNode& toRemove) {
 
-	NiAVObject* obj = nullptr;
-	bool sparePathUsed = false;
+	if (toRemove.value.isLink()) { //Is a ^parent inserted node
+		removeRuntimeParent(toRemove);
+	}
+	else {
+		removeRuntimeChild(toRemove);
+	}
+
+}
+
+void NiNode::removeRuntimeChild(const NiRuntimeNode& toRemove) {
+
+	NiAVObject* removeChild = nullptr;
+	if (toRemove.isValid() == false) { //No cached path
+		if (toRemove.node.isValid()) {
+			removeChild = DeepSearchBySparsePath(NiBlockPathBase(toRemove.sparsePath, toRemove.node));
+		}
+	}
+	else {
+
+		uint16_t resultDepth;
+		removeChild = DeepSearchByPath(NiBlockPathBase(toRemove.cachedPath, toRemove.node), resultDepth);
+
+		if (!removeChild || toRemove.node != removeChild->m_blockName) { //Didin't find full path
+			removeChild = DeepSearchBySparsePath(NiBlockPathBase(toRemove.sparsePath, toRemove.node));
+		}
+	}
+
+	if (!removeChild) {
+		Console_Print("removeRuntimeChild JIP Error, couldn't find the runtime child");
+		return;
+	}
+
+	removeChild->m_parent->RemoveObject(removeChild);
+
+}
+
+void NiNode::removeRuntimeParent(const NiRuntimeNode& toRemove) {
+
+	NiNode* removeParent = nullptr;
 	if (toRemove.isValid() == false) { //No cached path
 
 		if (toRemove.node.isValid()) {
-			obj = DeepSearchBySparsePath(NiBlockPathBase(toRemove.sparsePath, toRemove.node));
-			sparePathUsed = true;
+			removeParent = (NiNode*)DeepSearchBySparsePath(toRemove.sparsePath);
 		}
 
 	}
 	else {
 
-		obj = DeepSearchByPath(NiBlockPathBase(toRemove.cachedPath, toRemove.node));
-		if (!obj || obj->m_blockName != toRemove.node) { //Didin't find full path
-			obj = DeepSearchBySparsePath(NiBlockPathBase(toRemove.sparsePath, toRemove.node));
-			sparePathUsed = true;
-		}
+		uint16_t resultDepth;
+		NiAVObject* grandparent = DeepSearchByPath(NiBlockPathBase(toRemove.cachedPath, toRemove.node), resultDepth);
 
-	}
+		if (!grandparent || grandparent->m_blockName != toRemove.node) { //Didin't find full path
 
-	if (obj) {
-
-		if (toRemove.value.isLink()) { //Is a ^parent inserted node
-
-			const NiFixedString* childName = &toRemove.value.getLink().childObj;
-			NiNode* insertedParent = nullptr;
-
-			//if (obj->m_blockName == *childName) { //if sparse path was used
-			if (sparePathUsed) { //Safer
-				insertedParent = static_cast<NiNode*>(obj->m_parent);		
-			}
-			else {
-				insertedParent = static_cast<NiNode*>(obj);
-			}
-
-			NiBlockPathBuilder builder;
-			NiAVObject* originalChild = insertedParent->BuildNiPath(NiBlockPathView(childName, 1), builder);
-
-			if (!originalChild) {
-				Console_Print("Some JIP Error, either child was invalid, or the child parent no longer matches the inserted node");
+			NiNode* child = (NiNode*)DeepSearchBySparsePath(toRemove.sparsePath);
+			if (!child || child == this) {
+				Console_Print("removeRuntimeParent JIP Error, couldn't find a valid child");
 				return;
 			}
 
-			//Restore child
-				NiNode* grandParent = insertedParent->m_parent;
+			removeParent = (NiNode*)child->findParentNode(toRemove.node, this);
 
-			//Grab the first child of this path, its most likely going to be the original child
-				NiNode* child = const_cast<NiNode*>(builder.parents[0].node);
-
-				grandParent->AddObject(child, true); //Orphans insertedParent
-				//grandParent->UpdateTransformAndBounds(kNiUpdateData);
-
-		}
-		else {
-			auto parent = obj->m_parent;
-			parent->RemoveObject(obj);
-			//parent->UpdateTransformAndBounds(kNiUpdateData);
 		}
 
 	}
+
+	if (!removeParent) {
+		Console_Print("removeRuntimeParent JIP Error, couldn't find the runtime parent to remove");
+		return;
+	}
+
+	removeParent->collapseRuntimeNode();
+
+}
+
+inline void NiNode::detachRuntimeNode() {
+	if (!this) return;
+
+	if (!(this->m_flags & NiAVObject::NiFlags::kNiFlag_IsInserted)) {
+		Console_Print("detachRuntimeNode error: node is not a runtime node");
+		return;
+	}
+
+	this->m_parent->RemoveObject(this);
+}
+
+inline void NiNode::collapseRuntimeNode() {
+
+	if (!this) return;
+
+	if (!(this->m_flags & NiAVObject::NiFlags::kNiFlag_IsInserted)) {
+		Console_Print("collapseRuntimeNode error: node is not a runtime node");
+		return;
+	}
+
+	NiNode* parent = this->m_parent;
+	for (auto child : this->m_children) {
+
+		if (!child) continue;
+		parent->AddObject(child, true);
+
+	}
+
+	this->RemoveObject(this);
 
 }
 
@@ -394,95 +431,83 @@ NiAVObject* TESObjectREFR::findNodeByName(GetRootNodeMask which, const char* blo
 //From Plugins+
 NiAVObject* NiNode::DeepSearchBySparsePath(const NiBlockPathView& blockPath)
 {
-	//if (blockPath.size() == 0)
-		//return nullptr;
-	// same logic as above
 	NiBlockPathBuilder builder;
 	return BuildNiPath(blockPath, builder);
 }
 
 // public entry – takes a “A\B\C” string
-NiAVObject* NiNode::DeepSearchByPath(const char* blockPath)
+NiAVObject* NiNode::DeepSearchByPath(const char* blockPath, uint16_t& matchedDepth)
 {
 	if (!blockPath || !*blockPath)
-		return nullptr;
+		return 0;
 
 	// split into segments
 	NiBlockPathBase path(blockPath);
 	if (path.size() == 0)
-		return nullptr;
+		return 0;
 
-	// if the first segment matches *this*, skip it; otherwise treat it as relative
-	uint32_t startIdx = (this->m_blockName == path[0]) ? 1 : 0;
-	return DeepSearchByPathIter(path, startIdx);
+	return DeepSearchByPath(path, matchedDepth);
 }
 
-// public overload – takes a pre-split path, if this fails, it will return the deepest path it found.
-NiAVObject* NiNode::DeepSearchByPath(const NiBlockPathView& blockPath)
+// public overload – takes a pre-split path, if this fails, it will return the size.
+
+NiAVObject* NiNode::DeepSearchByPath(const NiBlockPathView& blockPath, uint16_t& matchedDepth)
 {
-	if (blockPath.size() == 0)
-		return nullptr;
-	// same logic as above
-	uint32_t startIdx = (this->m_blockName == blockPath[0]) ? 1 : 0;
+	const uint16_t pathLen = static_cast<uint16_t>(blockPath.size());
+	matchedDepth = 0;
 
-	// early out if we already have no segments left
-	if (startIdx >= blockPath.size())
-		return this;
+	if (pathLen == 0) return nullptr;                     // invalid
+	if (m_blockName != blockPath[0]) return nullptr;      // root segment mismatch
 
-	return DeepSearchByPathIter(blockPath, startIdx);
-}
+	// Root matches
+	matchedDepth = 1;
+	NiAVObject* result = this;
+	if (pathLen == 1) return result;                      // single-seg path
 
-// private iterative core
-NiAVObject* NiNode::DeepSearchByPathIter(const NiBlockPathView& blockPath, uint32_t startIdx)
-{
+	const NiNode* currentNode = this;
+	uint16_t segIdx = 1;   // next segment to match
+	uint16_t childIdx = 0;
 
-	struct Frame {//switch to NiBlockPathBuilder
-		const NiNode* node;     // current node
-		uint32_t       segIdx;   // which path segment we’re matching
-		UInt16         childIdx; // next child to try
-	};
+	while (currentNode) {
+		const UInt16 numChildren = currentNode->m_children.firstFreeEntry;
 
-	std::vector<Frame> stack;
-	stack.reserve(blockPath.size());
-	stack.push_back({ this, startIdx, 0 });
+		if (childIdx < numChildren) {
+			NiAVObject* child = currentNode->m_children[childIdx++];
+			if (!child) continue;
 
-	NiAVObject* bestMatch = (startIdx > 0) ? this : nullptr;
+			// segment match?
+			if (child->m_blockName == blockPath[segIdx]) {
+				result = child;
+				matchedDepth = static_cast<uint16_t>(segIdx + 1);
 
-	while (!stack.empty()) {
-		Frame& frame = stack.back();
-		const NiNode* cur = frame.node;
-		uint32_t idx = frame.segIdx;
+				// full match achieved
+				if (matchedDepth == pathLen)
+					return result;
 
-		UInt16 numChildren = cur->m_children.firstFreeEntry;
-		if (frame.childIdx < numChildren) {
-			NiAVObject* child = cur->m_children[frame.childIdx++];
-			if (!child)
-				continue;
-
-			// match this segment?
-			if (child->m_blockName == blockPath[idx]) {
-
-				// record it as our new deepest
-				bestMatch = child;
-
-				if (idx + 1 == blockPath.size())
-					return child;
-
-				if (NiNode* childNode = child->GetNiNode()) {
-					stack.push_back({ childNode, idx + 1, 0 });
+				// must descend for next segment; if not a node, path can't be completed
+				if (child->isNiNode()) {
+					currentNode = static_cast<const NiNode*>(child);
+					++segIdx;
+					childIdx = 0;
+					continue;
 				}
+
+				// can't descend further; return partial match
+				return result;
 			}
+			// else keep scanning siblings at this level
 		}
 		else {
-			// no more children here -> backtrack
-			stack.pop_back();
+			// Out of siblings at this level → no deeper match possible without backtracking.
+			return result;  // partial match at current matchedDepth
 		}
 	}
 
-	return bestMatch;
+	// Shouldn't be reached; return whatever deepest we recorded.
+	return result;
 }
 
-NiAVObject* NiNode::findParentNode(const NiFixedString& parentName, NiNode* stopAt)
+NiNode* NiNode::findParentNode(const NiFixedString& parentName, NiNode* stopAt)
 {
 	if (!parentName.getPtr())
 		return nullptr;
@@ -503,80 +528,26 @@ NiAVObject* NiNode::findParentNode(const NiFixedString& parentName, NiNode* stop
 	return nullptr;
 }
 
-NiAVObject* NiNode::DeepSearchByName(const char* blockName)
-{
-
-	if (!blockName || blockName[0] == '\0')
-		return nullptr;
-
-	NiFixedString fixedStr = NiFixedString(blockName);
-
-	if (!fixedStr)
-		return nullptr;
-
-	if (this->m_blockName == fixedStr)
-		return this;
-	else {
-		return this->DeepSearchByNameIter(fixedStr);
-	}
-
+NiAVObject* NiNode::DeepSearchByName(const char* blockName) {
+	if (!blockName || blockName[0] == '\0') return nullptr;
+	NiFixedString fixed(blockName);
+	return this->DeepSearchByName(fixed);
 }
-
-//Prevents name mangling with naked functions.
-/*
-NiAVObject* NiNode::GetBlockByName(const char* nameStr) const noexcept	//	str of NiFixedString
-{
-	return this->DeepSearchByName(nameStr);
-}*/
 
 NiAVObject* NiNode::DeepSearchByName(const NiFixedString& nameStr)
 {
-	if (!nameStr.getPtr())
-		return nullptr;
 
-	// check ourselves first
-	if (m_blockName == nameStr)
-		return this;
+	if (!this || !nameStr.getPtr()) return nullptr;
 
-	return DeepSearchByNameIter(nameStr);
-}
-
-
-NiAVObject* NiNode::DeepSearchByNameIter(const NiFixedString& target) const
-{
-
-	struct Frame { const NiNode* node; UInt16 nextChild; }; //switch to NiBlockPathBuilder
-
-	std::vector<Frame> stack;
-	stack.reserve(64);
-	stack.push_back({ this, 0 });
-
-	while (!stack.empty()) {
-		auto& fr = stack.back();
-		const NiNode* cur = fr.node;
-
-		// try next child
-		if (fr.nextChild < cur->m_children.firstFreeEntry) {
-			NiAVObject* child = cur->m_children[fr.nextChild++];
-			if (!child)
-				continue;
-
-			// name match?
-			if (child->m_blockName == target)
-				return child;
-
-			// if it’s a node, descend
-			if (NiNode* childNode = child->GetNiNode()) {
-				stack.push_back({ childNode, 0 });
-			}
+	NiAVObject* result = nullptr;
+	this->TraverseHorizontal64([&](NiAVObject* obj) {
+		if (obj->m_blockName == nameStr) {
+			result = obj;
+			return false; // stop traversal on first match
 		}
-		else {
-			// exhausted all children -> backtrack
-			stack.pop_back();
-		}
-	}
+		return true; // keep going
+	});
 
-	return nullptr;
-
+	return result;
 
 }

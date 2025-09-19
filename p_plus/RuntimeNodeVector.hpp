@@ -40,6 +40,99 @@ struct NiRuntimeNodeVector {
         allPaths.emplace_back(std::move(nodePath));
     }
 
+    static inline std::string_view _typeToString(const NiRuntimeNode& node) noexcept {
+        if (node.value.isModel()) return "Model";
+        if (node.value.isRefID()) return "Ref";
+        if (node.value.isLink())  return "^";
+        return "Node";
+    }
+
+    static inline uint32_t _depthOf(const NiRuntimeNode& n) noexcept {
+        // Prefer cached depth if available; else sparse depth (+leaf if present)
+        if (n.cachedPath.size() > 0) return n.cachedPath.size();
+        return n.sparsePath.size() + (n.node.isValid() ? 1u : 0u);
+    }
+
+    inline std::string toString(bool includeHeader = true, bool includeCachedPath = false, bool leadingSlash = false) const
+    {
+
+        const size_t count = allPaths.size();
+        std::string out;
+
+        // Rough reserve to cut reallocs (tweak multiplier if needed)
+        out.reserve((includeHeader ? 32 : 0) + count * 96);
+
+        if (includeHeader) {
+            out += "NiRuntimeNodeVector[count=";
+            out += std::to_string(count);
+            out += "]\n";
+        }
+
+        size_t idx = 0;
+        for (const NiRuntimeNode* entry : allPaths) {
+            if (!entry) continue;
+
+            // [#i T depth=.. mod=..]  sparse\leaf
+            out += "[#";
+            out += std::to_string(idx++);
+            out += ' ';
+            out += _typeToString(*entry);
+            out += ' ';
+            out += "depth=";
+            out += std::to_string(_depthOf(*entry));
+            out += ' ';
+            out += "mod=";
+            out += std::to_string(entry->modIndex);
+            out += "]  ";
+
+            // sparsePath \ leaf
+            out += entry->toString(leadingSlash, /*includeLeaf*/ true);
+
+            // token details (short)
+            if (entry->value.isModel()) {
+                const auto& modelPath = entry->value.getModelPath();
+                out += "  [model:";
+                if (modelPath.suffix.isValid()) {
+                    out += " *";
+                    out += modelPath.suffix.CStr();
+                    out += '*';
+                }
+                out += ' ';
+                out += (modelPath.path.isValid() ? modelPath.path.CStr() : "<null>");
+                out += ']';
+            }
+            else if (entry->value.isRefID()) {
+                const auto& refModel = entry->value.getRefModel();
+                char hexbuf[11];
+                std::snprintf(hexbuf, sizeof(hexbuf), "0x%08X", refModel.refID);
+                out += "  [ref:";
+                out += hexbuf;
+                if (refModel.suffix.isValid()) {
+                    out += " *";
+                    out += refModel.suffix.CStr();
+                    out += '*';
+                }
+                out += ']';
+            }
+            else if (entry->value.isLink()) {
+                out += "  [^parent of ";
+                const auto& link = entry->value.getLink();
+                out += (link.childObj.isValid() ? link.childObj.CStr() : "<null>");
+                out += ']';
+            }
+
+            if (includeCachedPath && entry->cachedPath.size() > 0) {
+                out += "  | cached=";
+                out += entry->cachedPath.toString(leadingSlash);
+            }
+
+            out += '\n';
+        }
+
+        return out;
+
+    }
+
     // Copy-append: copies nodes from src into *this
     void appendCopy(const NiRuntimeNodeVector& src) {
         auto srcSpan = src.allPaths.getStorage();           // contiguous storage
@@ -378,7 +471,7 @@ struct NiRuntimeNodeVector {
             toAttach->AddSuffixToAllChildren(modelPath.suffix.getPtr());
             toAttach->DownwardsInitPointLights(toAttach);
             toAttach->AddPointLights();
-            node->AddObject(toAttach, true);
+            node->attachRuntimeNode(toAttach);
             node->UpdateTransformAndBounds(kNiUpdateData);
             node->updatePalette();
 
@@ -411,7 +504,7 @@ struct NiRuntimeNodeVector {
 
             NiNode* toAttach = formModel.detachCopyNode();
 
-            node->AddObject(toAttach, true);
+            node->attachRuntimeNode(toAttach);
             node->UpdateTransformAndBounds(kNiUpdateData);
             node->updatePalette();
 
@@ -448,26 +541,25 @@ struct NiRuntimeNodeVector {
         //Attach to live root
 
         NiBlockPathBuilder fullPath;
-        NiNode* toAttachTo = static_cast<NiNode*>(root->BuildNiPath(attachPath, fullPath));
+        NiNode* target = static_cast<NiNode*>(root->BuildNiPath(attachPath, fullPath));
 
-        if (!toAttachTo) return false;
+        if (!target) return false;
 
         if (nodeName[0] == '^') {
 
             NiFixedString name(nodeName + 1); //Skip the ^ parent syntax
-            if (toAttachTo == root || !toAttachTo->m_parent || toAttachTo->m_parent->m_blockName == name) return false;
+            if (target == root || !target->m_parent || target->m_parent->m_blockName == name) return false;
 
             // Splice all existing NiRuntimeNode paths
             updatePathsOnNodeInsert(fullPath, name);
-            NiNode* newParent = NiNode::pCreate(name);
+            NiNode* newParentNode = NiNode::pCreate(name);
 
             // Splice into the scene graph
-            NiNode* grandparent = toAttachTo->m_parent;
+            NiNode* grandparent = target->m_parent;
 
             // re‑parent the original node under our newParent
-            newParent->AddObject(toAttachTo, true);
-            grandparent->AddObject(newParent, true);
-            newParent->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
+            newParentNode->AddObject(target, true);
+            grandparent->attachRuntimeNode(newParentNode);
 
             grandparent->UpdateTransformAndBounds(kNiUpdateData);
             grandparent->updatePalette();
@@ -483,16 +575,15 @@ struct NiRuntimeNodeVector {
         else {
 
             NiFixedString name(nodeName);
-            if (!toAttachTo || !toAttachTo->isNiNode() || toAttachTo->hasChildNode(name))
+            if (!target || !target->isNiNode() || target->hasChildNode(name))
                 return false;
 
-            NiNode* child = NiNode::pCreate(name);
-            if (!child) return false;
+            NiNode* newChildNode = NiNode::pCreate(name);
+            if (!newChildNode) return false;
 
-            toAttachTo->AddObject(child, true);
-            toAttachTo->UpdateTransformAndBounds(kNiUpdateData);
-            toAttachTo->updatePalette();
-            child->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
+            target->attachRuntimeNode(newChildNode);
+            target->UpdateTransformAndBounds(kNiUpdateData);
+            target->updatePalette();
 
             if (insertIntoMap) {
                 return emplaceChildNode(modIndex, attachPath, name, std::move(fullPath));
@@ -553,82 +644,6 @@ struct NiRuntimeNodeVector {
 
     }
 
-    bool forceRefreshCache(NiNode* root) {
-
-        if (!root) { return false; }
-
-        bool update = false;
-        auto storage = this->allPaths.getStorage(); //Iterate by insertion order
-        for (NiRuntimeNode& entry : storage) {
-
-            entry.cachedPath.clear(); //Invalidate cache
-
-            NiBlockPathBuilder builderPath;
-            NiNode* node = (NiNode*)root->BuildNiPath(entry.sparsePath, builderPath);
-            if (!node || !node->isNiNode()) {
-                continue;
-            }
-            entry.cachedPath = std::move(builderPath.toStaticPath()); //Update cache
-
-        }
-
-        if (update) {
-            allPaths.resort(); //This should push all the empty cachedPaths to the end of the path stack.
-            return update;
-        }
-
-    }
-
-    //This isn't really useful because removing and attaching has this built in.
-    //This will also fail for nested models
-    bool updateCache(NiNode* root) {
-
-        if (!root) { return false; }
-
-        bool update = false;
-        auto storage = this->allPaths.getStorage(); //Iterate by insertion order
-        for (NiRuntimeNode& entry : storage) {
-
-            NiNode* node = nullptr;
-            if (entry.cachedPath.size() == 0) { //Create cached path
-
-                NiBlockPathBuilder builderPath;
-                node = (NiNode*)root->BuildNiPath(entry.sparsePath, builderPath);
-                if (!node || !node->isNiNode()) {
-                    update = true;
-                    continue;
-                }
-                entry.cachedPath = std::move(builderPath.toStaticPath()); //Update cache
-                update = true;
-
-            }
-            else {
-
-                node = (NiNode*)root->DeepSearchByPath(entry.cachedPath);
-                if (!node || node->m_blockName != entry.cachedPath.back()) { //Didin't find full path
-
-                    NiBlockPathBuilder builderPath;
-                    node = (NiNode*)root->BuildNiPath(entry.sparsePath, builderPath);
-                    if (!node || !node->isNiNode()) {
-                        entry.cachedPath.clear(); //Invalidate cache
-                        update = true;
-                        continue;
-                    }
-                    entry.cachedPath = std::move(builderPath.toStaticPath()); //Update cache
-                    update = true;
-                }
-
-            }
-
-        }
-
-        if (update) {
-            allPaths.resort(); //This should push all the empty cachedPaths to the end of the path stack.
-            return update;
-        }
-
-    }
-
     /*
                     toRemove = (NiNode*)root->DeepSearchByPath(NiBlockPathBase(entry->cachedPath, entry->node));
                 if (toRemove && toRemove->m_blockName == entry->cachedPath.back()) { //Found root path, but not the runtime node.
@@ -662,8 +677,15 @@ struct NiRuntimeNodeVector {
 
     NiAVObject* findAndUpdateNode(NiRuntimeNode& runtimeNode, NiNode& root, bool& updated) {
 
-        NiAVObject* found = (NiNode*)root.DeepSearchByPath(NiBlockPathBase(runtimeNode.cachedPath, runtimeNode.node));
-        if (!found || found->m_blockName != runtimeNode.node) { //Didn't find full path, lets rebuild the cache
+        uint16_t resultDepth;
+        NiAVObject* found = root.DeepSearchByPath(NiBlockPathBase(runtimeNode.cachedPath, runtimeNode.node), resultDepth);
+
+        if (!found) {
+            Console_Print("findAndUpdateNode JIP Error, cachedPath is invalid");
+            return nullptr;
+        }
+
+        if (runtimeNode.node != found->m_blockName) { //Didn't find full path, lets rebuild the cache
 
             NiNode* subSearch = &root;
             NiBlockPathBuilder builderPath;
@@ -678,11 +700,10 @@ struct NiRuntimeNodeVector {
                     return nullptr;
                 }
 
-                NiNode* grandparent = child->m_parent;
                 builderPath.pop(); //Use grandparent
                 runtimeNode.cachedPath = std::move(builderPath.toStaticPath()); //Update cache
 
-                return grandparent->findParentNode(runtimeNode.node, &root);
+                return child->findParentNode(runtimeNode.node, &root);
 
             }
             else { //Normal node
@@ -707,7 +728,7 @@ struct NiRuntimeNodeVector {
 
     }
 
-    //Also does some cleanup
+    //Also does some cleanup, update this to use the node insert flags.
     bool removeAllRuntimeNodes(NiNode* root) {
 
         if (!root) { return false; }
@@ -726,16 +747,14 @@ struct NiRuntimeNodeVector {
                     const NiFixedString* childName = &entry->value.getLink().childObj;
 
                     NiBlockPathBuilder builder;
-                    NiAVObject* originalChild = insertedParent->BuildNiPath(NiBlockPathView(childName, 1), builder);
 
-                    if (!originalChild) {
-                        Console_Print("Some JIP Error, either child was invalid, or the child parent no longer matches the inserted node");
-                        continue;
+                    if (NiAVObject* originalChild = insertedParent->findFirstValidChild()) {
+                        insertedParent->replaceMe(originalChild); //Swaps insertedParent with originalChild
                     }
-
-                    //Restore child
-                    NiNode* grandParent = insertedParent->m_parent;
-                    insertedParent->replaceMe(originalChild); //Swaps insertedParent with originalChild
+                    else {
+                        Console_Print("removeAllRuntimeNodes JIP Error, couldn't find a valid child to replace an inserted parent");
+                        insertedParent->m_parent->RemoveObject(insertedParent);
+                    }
 
 
                 }
@@ -813,8 +832,14 @@ struct NiRuntimeNodeVector {
         }
         else {
 
-            node = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath);
-            if (!node || node->m_blockName != toAttach.cachedPath.back()) { //Didin't find full path
+            uint16_t resultDepth;
+            node = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath, resultDepth);
+            if (!resultDepth) {
+                Console_Print("attachRuntimeModel JIP Error, cachedPath is invalid");
+                return false;
+            }
+
+            if (resultDepth != toAttach.cachedPath.size()) { //Didin't find full path
 
                 NiBlockPathBuilder builderPath;
                 node = (NiNode*)root.BuildNiPath(toAttach.sparsePath, builderPath);
@@ -835,18 +860,18 @@ struct NiRuntimeNodeVector {
 
         if (!node->hasChildNode(tempModel.clonedNode->m_blockName)) {
 
-            NiNode* toAttachNode = tempModel.detachNode();
+            NiNode* formRootNode = tempModel.detachNode();
 
-            toAttachNode->RemoveCollision(); //Prevents invalid collision
-            toAttachNode->AddSuffixToAllChildren(modelPath.suffix.getPtr());
-            toAttachNode->DownwardsInitPointLights(toAttachNode);
-            toAttachNode->AddPointLights();
+            formRootNode->RemoveCollision(); //Prevents invalid collision
+            formRootNode->AddSuffixToAllChildren(modelPath.suffix.getPtr());
+            formRootNode->DownwardsInitPointLights(formRootNode);
+            formRootNode->AddPointLights();
 
-            node->AddObject(toAttachNode, true);
+            node->attachRuntimeNode(formRootNode);
             //node->UpdateTransformAndBounds(kNiUpdateData);
 
             if (!toAttach.node.isValid()) { //Node can be null if model wasn't instantly loaded and attached when call from a script.
-                toAttach.node = toAttachNode->m_blockName;
+                toAttach.node = formRootNode->m_blockName;
             }
 
         }
@@ -870,8 +895,14 @@ struct NiRuntimeNodeVector {
         }
         else {
 
-            node = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath);
-            if (!node || node->m_blockName != toAttach.cachedPath.back()) { //Didin't find full path
+            uint16_t resultDepth;
+            node = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath, resultDepth);
+            if (!resultDepth) {
+                Console_Print("attachRuntimeNodeChild JIP Error, cachedPath is invalid");
+                return false;
+            }
+
+            if (resultDepth != toAttach.cachedPath.size()) { //Didin't find full path
 
                 NiBlockPathBuilder builderPath;
                 node = (NiNode*)root.BuildNiPath(toAttach.sparsePath, builderPath);
@@ -891,7 +922,7 @@ struct NiRuntimeNodeVector {
         }
 
         NiNode* newNode = NiNode::pCreate(toAttach.node);
-        node->AddObject(newNode, true);
+        node->attachRuntimeNode(newNode);
         //node->UpdateTransformAndBounds(kNiUpdateData);
 
         newNode->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
@@ -919,8 +950,15 @@ struct NiRuntimeNodeVector {
         }
         else {
 
-            grandparent = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath);
-            if (!grandparent || grandparent->m_blockName != toAttach.cachedPath.back()) { //Didin't find full path
+            uint16_t resultDepth;
+            grandparent = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath, resultDepth);
+
+            if (!resultDepth) {
+                Console_Print("attachRuntimeNodeChild JIP Error, cachedPath is invalid");
+                return false;
+            }
+
+            if (resultDepth != toAttach.cachedPath.size()) { //Didin't find full path
 
                 NiBlockPathBuilder builderPath;
                 child = (NiNode*)root.BuildNiPath(toAttach.sparsePath, builderPath);
@@ -933,16 +971,11 @@ struct NiRuntimeNodeVector {
                 builderPath.pop();
                 toAttach.cachedPath = std::move(builderPath.toStaticPath()); //Update cache
             }
+            else {
+                child = (NiNode*)grandparent->DeepSearchBySparsePath(toAttach.sparsePath);
+                grandparent = child->m_parent;
+            }
 
-        }
-
-        if (child->findParentNode(toAttach.node, &root)) {
-            return true;
-        }
-
-        const NiFixedString* childName = &toAttach.value.getLink().childObj;
-        if (!child) {
-            child = (NiNode*)grandparent->DeepSearchBySparsePath(NiBlockPathView(childName, 1));
         }
 
         if (!child) { //Child node was probably removed.
@@ -950,12 +983,13 @@ struct NiRuntimeNodeVector {
             return false;
         }
 
+        if (child->findParentNode(toAttach.node, &root)) {
+            return true;
+        }
+
         NiNode* newParent = NiNode::pCreate(toAttach.node);
         newParent->AddObject(child, true);
-        grandparent->AddObject(newParent, true);
-        //grandparent->UpdateTransformAndBounds(kNiUpdateData);
-
-        newParent->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
+        grandparent->attachRuntimeNode(newParent);
 
         return true;
 
@@ -984,8 +1018,14 @@ struct NiRuntimeNodeVector {
         }
         else {
 
-            node = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath);
-            if (!node || node->m_blockName != toAttach.cachedPath.back()) { //Didin't find full path
+            uint16_t resultDepth;
+            node = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath, resultDepth);
+            if (!resultDepth) {
+                Console_Print("attachRuntimeNodeChild JIP Error, cachedPath is invalid");
+                return false;
+            }
+
+            if (resultDepth != toAttach.cachedPath.size()) { //Didin't find full path
 
                 NiBlockPathBuilder builderPath;
                 node = (NiNode*)root.BuildNiPath(toAttach.sparsePath, builderPath);
@@ -1005,19 +1045,18 @@ struct NiRuntimeNodeVector {
 
         if (!node->hasChildNode(tempModel.clonedNode->m_blockName)) {
 
-            NiNode* toAttachNode = tempModel.detachNode();
+            NiNode* toAttachModel = tempModel.detachNode();
 
-            toAttachNode->attachAllRuntimeNodes(refRuntimeNodes);
-            toAttachNode->RemoveCollision(); //Prevents invalid collision
-            toAttachNode->AddSuffixToAllChildren(modelPath.suffix.getPtr());
-            toAttachNode->DownwardsInitPointLights(toAttachNode);
-            toAttachNode->AddPointLights();
+            toAttachModel->attachAllRuntimeNodes(refRuntimeNodes);
+            toAttachModel->RemoveCollision(); //Prevents invalid collision
+            toAttachModel->AddSuffixToAllChildren(modelPath.suffix.getPtr());
+            toAttachModel->DownwardsInitPointLights(toAttachModel);
+            toAttachModel->AddPointLights();
 
-            node->AddObject(toAttachNode, true);
-            //node->UpdateTransformAndBounds(kNiUpdateData);
+            node->attachRuntimeNode(toAttachModel);
 
             if (!toAttach.node.isValid()) { //Node can be null if model wasn't instantly loaded and attached when call from a script.
-                toAttach.node = toAttachNode->m_blockName;
+                toAttach.node = toAttachModel->m_blockName;
             }
 
         }

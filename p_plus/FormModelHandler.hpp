@@ -518,6 +518,7 @@ public:
                 g_thePlayer->node1stPerson->removeRuntimeNode(runtimeNode);
             }
             g_thePlayer->node1stPerson->UpdateTransformAndBounds(kNiUpdateData);
+
         }
 
         auto allNodesToRemove = runtimeList->removeNode(lookupPath, lookupName);

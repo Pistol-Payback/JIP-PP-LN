@@ -51,6 +51,52 @@ struct NiRuntimeNode {
 
     UInt32 modIndex;
 
+    inline std::string toString(bool leadingSlash = false, bool includeLeaf = true) const
+    {
+        // fast path: build once from sizes
+        std::string out = sparsePath.toString(leadingSlash);
+        if (includeLeaf && node.isValid()) {
+            if (!out.empty() || leadingSlash) out.push_back('\\');
+            out.append(node.CStr());
+        }
+        return out;
+    }
+
+    inline std::string toDebugString(bool leadingSlash = false, bool showTypeInfo = true, bool showCachedPath = false) const
+    {
+
+        std::string result = toString(leadingSlash, true);
+        if (showTypeInfo) {
+            if (value.isModel()) {
+                const auto& m = value.getModelPath();
+                result.append("  [Model: ");
+                if (m.suffix.isValid()) { result.push_back('*'); result.append(m.suffix.CStr()); result.push_back('*'); result.push_back(' '); }
+                result.append(m.path.isValid() ? m.path.CStr() : "<null>");
+                result.push_back(']');
+            }
+            else if (value.isRefID()) {
+                const auto& r = value.getRefModel();
+                char idbuf[11]; // "0xFFFFFFFF"
+                std::snprintf(idbuf, sizeof(idbuf), "0x%08X", r.refID);
+                result.append("  [Ref: ").append(idbuf);
+                if (r.suffix.isValid()) { result.append(" *").append(r.suffix.CStr()).append("*"); }
+                result.push_back(']');
+            }
+            else if (value.isLink()) {
+                const auto& l = value.getLink();
+                result.append("  [^parent of ").append(l.childObj.isValid() ? l.childObj.CStr() : "<null>").append("]");
+            }
+            else {
+                result.append("  [Node]");
+            }
+        }
+
+        if (showCachedPath && cachedPath.size() > 0) {
+            result.append("  | cached=").append(cachedPath.toString(leadingSlash));
+        }
+        return result;
+    }
+
     inline void reverseToFormatTo(pSmallBufferWriter& buf, TESForm*& outRef, NiToken::Type& outType) const noexcept
     {
         buf.reset();
