@@ -1031,59 +1031,6 @@ __declspec(naked) TESObjectREFR *TESObjectREFR::CreateInventoryRefForScriptedObj
 	}
 }
 
-__declspec(naked) void ValidateOpcodeSample()
-{
-	__asm
-	{
-		push	ebx
-		mov		ecx, ds:18628396
-		add		ecx, 536
-		mov		ebx, [ecx]
-		mov		edx, -1071495146
-		ALIGN 16
-	baseIter:
-		add		ecx, 4
-		mov		eax, [ecx]
-		cmp		[eax+0x120], edx
-		jz		hasBase
-		dec		ebx
-		jnz		baseIter
-		jmp		checkPOE
-	hasBase:
-		cmp		dword ptr [eax+0x3E0], 0x4000
-		jb		setOp
-		mov		ebx, eax
-	checkPOE:
-		push	101
-		push	1986622020
-		push	1128547924
-		mov		edx, esp
-		mov		ecx, ds:18633928
-		call	NiTMap<UInt32, UInt32>::Lookup
-		add		esp, 0xC
-		test	eax, eax
-		jz		done
-		cmp		byte ptr [eax+4], 17
-		jnz		done
-		cmp		[eax+0x10], ebx
-		jz		done
-	setOp:
-		mov		ebx, g_commandTbl+12
-		push	10442
-		call	ebx
-		mov		ecx, ebx
-		mov		ebx, 6113856
-		mov		[eax+0x18], ebx
-		xor		[esp], 31
-		call	ecx
-		pop		ecx
-		mov		[eax+0x18], ebx
-	done:
-		pop		ebx
-		retn
-	}
-}
-
 __declspec(naked) float __vectorcall GetLightAmount(LightingData *lightingData, __m128 pos)
 {
 	__asm
@@ -1238,7 +1185,6 @@ namespace JIPScriptRunner
 	{
 		if (s_log())
 			WriteRelCall(0x5AEB66, (UInt32)LogCompileError);
-		ValidateOpcodeSample();
 		initInProgress = 1;
 		for (DirectoryIterator iter(scriptsPath); iter; ++iter)
 			if (iter.IsFile())
