@@ -3,6 +3,7 @@
 // 48
 class ActiveEffect
 {
+
 public:
 	/*000*/virtual void		Destroy(bool doFree);
 	/*004*/virtual ActiveEffect	*Clone();
@@ -52,6 +53,105 @@ public:
 	{
 		ThisCall(0x804210, this, immediate);
 	}
+
+	//For Cmd_SetActiveEffects_Execute
+	enum {
+		kMagnitude = 0,
+		kTimeLeft = 1,
+		kDuration = 2,
+	};
+
+	void setTimeLeft(float timeLeft) {
+		if (isTempEffect()) {
+			float newTimeElapsed = duration - max(0.0f, timeLeft);
+			if (newTimeElapsed < 0.f) newTimeElapsed = 0.f;
+			if (newTimeElapsed > duration) newTimeElapsed = duration;
+			if (timeElapsed >= duration) {
+				Remove(true);
+			}
+			else {
+				timeElapsed = newTimeElapsed;
+			}
+		}
+	}
+
+	void setDuration(float _duration) {
+		duration = _duration;
+		// Clamp timeElapsed into [0, duration] if it was out of range
+		if (timeElapsed < 0.f) timeElapsed = 0.f;
+		if (timeElapsed > duration) timeElapsed = duration;
+		if (timeElapsed >= duration) Remove(true);	
+	}
+
+
+	inline bool isValid() {
+		if (!this) return false;
+		if (!this->bActive || this->bTerminated) return false;
+		return true;
+	}
+
+	inline bool isTempEffect()
+	{
+		if (!effectItem || (effectItem->duration <= 0) || !effectItem->setting) return false;
+		return true;
+	}
+
+	inline float computedMagnitude() {
+		return this->magnitude;
+	}
+
+	inline float timeLeft() {
+		return this->duration - this->timeElapsed;
+	}
+	inline TESForm* getBaseMGEF() {
+		return this->effectItem ? static_cast<TESForm*>(this->effectItem->setting) : nullptr;
+	}
+
+	inline TESForm* getEffect() {
+		return DYNAMIC_CAST(magicItem, MagicItem, TESForm);
+	}
+	inline TESForm* getCasterForm() {
+		return (this->caster ? this->caster->GetActor() : nullptr);
+	}
+
+	TESForm* getActiveEffect(UInt32 typeIDFilter, UInt8 tempEffectFilter, TESForm* formFilter = nullptr) {
+		if (tempEffectFilter == 2) {
+			return getActiveEffect(typeIDFilter, formFilter);
+		}
+		else {
+			return getActiveEffect(typeIDFilter, (bool)tempEffectFilter, formFilter);
+		}
+	}
+
+	TESForm* getActiveEffect(UInt32 typeIDFilter, TESForm* formFilter = nullptr) {
+		if (!this->isValid()) return nullptr;
+		if (TESForm* result = this->getEffect(); !typeIDFilter || result->typeID == typeIDFilter) {
+			if (this->evalFormFilter(result, formFilter) == false) return nullptr;
+			return result;
+		}
+		return nullptr;
+	}
+
+	TESForm* getActiveEffect(UInt32 typeIDFilter, bool isTempEffect, TESForm* formFilter = nullptr) {
+		if (!this->isValid()) return nullptr;
+		if (this->isTempEffect() != isTempEffect) return nullptr;
+		if (TESForm* result = this->getEffect(); !typeIDFilter || result->typeID == typeIDFilter) {
+			if (this->evalFormFilter(result, formFilter) == false) return nullptr;
+			return result;
+		}
+		return nullptr;
+	}
+
+	bool evalFormFilter(TESForm* parentEffect, TESForm* formFilter) {
+		if (formFilter == nullptr) return true;
+		if (formFilter->typeID == kFormType_EffectSetting) { //BaseEffect
+			this->getBaseMGEF() == formFilter;
+		}
+		else {
+			return parentEffect == formFilter;
+		}
+	}
+
 };
 
 // 4C

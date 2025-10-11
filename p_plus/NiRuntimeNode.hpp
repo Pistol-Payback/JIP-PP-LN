@@ -97,6 +97,10 @@ struct NiRuntimeNode {
         return result;
     }
 
+    inline std::string originToDebugString() const {
+        return "\"" + node.ToString() + "\" from " + std::string(g_dataHandler->GetNthModName(modIndex));
+    }
+
     inline void reverseToFormatTo(pSmallBufferWriter& buf, TESForm*& outRef, NiToken::Type& outType) const noexcept
     {
         buf.reset();

@@ -81,7 +81,7 @@ public:
     }
 
 
-    static inline bool splitPathHead(const char* fullPath, char* buffer,  size_t bufSize, const char*& outPrefix, const char*& outLeaf) noexcept {
+    static inline bool splitPathHead(const char* fullPath, char* buffer, size_t bufSize, const char*& outPrefix, const char*& outLeaf) noexcept {
 
         size_t len = strnlen(fullPath, bufSize);
         if (len == bufSize) return false;              // too long
@@ -181,9 +181,10 @@ public:
             }
 
             if (g_thePlayer->node1stPerson && g_thePlayer->node1stPerson->DeepSearchBySparsePath(pathToFind))
-               return true;
+                return true;
 
-        } else if (!form->IsBoundObject()) {
+        }
+        else if (!form->IsBoundObject()) {
             return false;
         }
 
@@ -556,7 +557,7 @@ public:
 
         //Remove from first person
         if (form->IsPlayer()) {
-                
+
             auto allNodesToRemove = playerFirstPersonModel.removeModel(lookupPath, lookupModel);
             for (auto& runtimeNode : std::views::reverse(allNodesToRemove)) {
                 g_thePlayer->node1stPerson->removeRuntimeNode(runtimeNode);
@@ -621,7 +622,7 @@ public:
         return true;
     }
 
-    NiRuntimeNodeVector* getNodesList(TESForm* form) { 
+    NiRuntimeNodeVector* getNodesList(TESForm* form) {
         const auto iter = nodeTree.find(form);
         NiRuntimeNodeVector* pathList = nullptr;
         if (iter != nodeTree.end()) {

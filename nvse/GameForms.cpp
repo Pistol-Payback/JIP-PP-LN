@@ -427,6 +427,20 @@ __declspec(naked) void __fastcall TESObjectCELL::ToggleNodes(UInt32 nodeBits)
 	}
 }
 
+TESObjectCELL::CellRenderData::CellSubNodes TESObjectCELL::CellRenderData::formToSubNodes(TESObjectREFR* form) {
+	if (form->IsActor()) {
+		return kNodeIdx_Actors;
+	}
+	else if (form->baseForm->typeID == kFormType_TESObjectSTAT) {
+		return kNodeIdx_StaticObj;
+	}
+	//else if (form->IsMobile()) { //Projectiles, items
+	else {
+		return kNodeIdx_DynamicObj;
+	} //More
+	return kNodeIdx_Null;
+}
+
 TESObjectCELL *CellPointerMap::Lookup(UInt32 key) const;
 
 __declspec(naked) TESObjectCELL* __vectorcall TESWorldSpace::GetCellAtPos(__m128 pos) const

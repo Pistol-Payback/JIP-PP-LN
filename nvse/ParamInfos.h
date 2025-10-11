@@ -11,6 +11,13 @@ constexpr ParamInfo kParams_TwoInts[] =
 	{kParamType_Integer}
 };
 
+constexpr ParamInfo kParams_TwoInts_OneFloat[] =
+{
+	{kParamType_Integer},
+	{kParamType_Integer},
+	{ kParamType_Float }
+};
+
 constexpr ParamInfo kParams_OneOptionalInt[] =
 {
 	{kParamType_Integer, 1}
@@ -1184,6 +1191,12 @@ constexpr ParamInfo kParams_OneForm_OneString_OneOptionalBasicType[] =
 	{kNVSEParamType_BasicType, 1}
 };
 
+constexpr ParamInfo kParams_OneOptionalBasicType_OneOptionalInt[] =
+{
+	{kNVSEParamType_NoTypeCheck, 1}, //For script runner
+	{kParamType_Integer, 1}
+};
+
 constexpr ParamInfo kParams_OneMagicItem[] =
 {
 	{kParamType_MagicItem}
@@ -1527,6 +1540,14 @@ constexpr ParamInfo kParams_OneOptionalObjectRef_OneOptionalInt_OneOptionalFloat
 	{kParamType_Integer, 1},
 	{kParamType_Float, 1},
 	{kParamType_String, 1}
+};
+
+constexpr ParamInfo kParams_OneOptionalInt_OneOptionalObjectRef_OneOptionalString_OneOptionalInt[] =
+{
+	{kParamType_Integer, 1},
+	{kParamType_ObjectRef, 1},
+	{kParamType_String, 1},
+	{kParamType_Integer, 1},
 };
 
 constexpr ParamInfo kParams_OneOptionalInt_OneOptionalString[] =

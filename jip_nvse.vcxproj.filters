@@ -100,6 +100,9 @@
     <ClCompile Include="p_plus\NiBlockPath.cpp">
       <Filter>pUtilities\Models</Filter>
     </ClCompile>
+    <ClCompile Include="p_plus\hookGlue.cpp">
+      <Filter>pUtilities</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal\hooks.h">
@@ -441,6 +444,12 @@
     <ClInclude Include="p_plus\GamePatchesINI.hpp">
       <Filter>startup</Filter>
     </ClInclude>
+    <ClInclude Include="p_plus\pWeakPtr.hpp">
+      <Filter>pUtilities\Nif</Filter>
+    </ClInclude>
+    <ClInclude Include="p_plus\SyncPosition.hpp">
+      <Filter>pUtilities\Models</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="exports.def" />
@@ -466,7 +475,7 @@
       <Filter>pUtilities</Filter>
     </Natvis>
     <Natvis Include="p_plus\NiTArray.natvis">
-      <Filter>pUtilities</Filter>
+      <Filter>pUtilities\Nif</Filter>
     </Natvis>
   </ItemGroup>
 </Project>

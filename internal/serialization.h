@@ -1,5 +1,5 @@
 #pragma once
-
+#include "p_Plus/SyncPosition.hpp"
 #define JIP_VARS_VERSION 10
 
 enum JIPSerializationTags : UInt32
@@ -92,7 +92,7 @@ void DoPreLoadGameHousekeeping()
 	}
 
 	for (auto lgtIter = s_activePtLights->Begin(); lgtIter; ++lgtIter)
-		if ((lgtIter->extraFlags & 0x80) && lgtIter->m_parent)
+		if ((lgtIter->extraFlags.isFromScript()) && lgtIter->m_parent)
 			lgtIter->m_parent->RemoveObject(*lgtIter);
 
 	if (!s_swapObjLODMap->Empty())
@@ -151,7 +151,10 @@ void DoPreLoadGameHousekeeping()
 	s_onRagdollEventScripts->Clear();
 	s_excludedCombatActionsMap->Clear();
 	MiniMapLoadGame();
-	s_syncPositionRef = nullptr;
+
+	//s_syncPositionRef = nullptr;
+	syncPosManager.clear();
+
 	g_thePlayer->killer = nullptr;
 }
 

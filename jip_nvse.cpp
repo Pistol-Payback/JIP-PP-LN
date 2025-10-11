@@ -1430,16 +1430,23 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 	/*2943*/REG_CMD(GetControlCodeByID);
 
 	// v57.48
-	REG_CMD(AttachFormModel);
-	REG_CMD(CopyRuntimeNodes);
-	REG_CMD(HasRuntimeNode);
-	REG_CMD_ARR(GetRuntimeNodes);
-	REG_CMD(ClearRuntimeNodes);
+	/*2944*/ REG_CMD(AttachFormModel);
+	/*2945*/ REG_CMD(CopyRuntimeNodes);
+	/*2946*/ REG_CMD(HasRuntimeNode);
+	/*2947*/ REG_CMD_ARR(GetRuntimeNodes);
+	/*2948*/ REG_CMD(ClearRuntimeNodes);
 
-	REG_CMD(RefreshInventoryWeight);
+	// v57.50
+	/*2949*/ REG_CMD(RefreshInventoryWeight);
+	/*294A*/ REG_CMD(ClampToGround);
 
-	REG_CMD(ClampToGround);
-	
+	// v57.53
+	/*294B*/ REG_CMD(SynchronizePositionAlt);
+	/*294C*/ REG_CMD(ModSynchronizedPosition);
+	/*294D*/ REG_CMD(IsSynchronized);
+	/*294E*/ REG_CMD(GetSynchronizedChildren);
+	/*294F*/ REG_CMD_ARR(GetActiveEffectsInfo);
+	/*2950*/ REG_CMD(SetActiveEffectsInfo);
 
 	//===========================================================
 

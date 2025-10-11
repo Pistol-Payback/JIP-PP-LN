@@ -392,6 +392,26 @@ void NiAVObject::DumpParents()
 	//s_debug.Indent();
 }
 
+LightingData* LightingData::CreatePointLight(NiPointLight* pl, BSPortalGraph* portals)
+{
+	// allocate + construct
+	LightingData* raw = LightingData::Create();
+	if (!raw) return {};
+
+	// init
+	raw->isPointLight = true;
+	raw->isAmbientLight = false;
+
+	NiAddRef(pl);
+	raw->light = pl;
+
+	raw->isDynamic = true;
+	raw->portalGraph = portals;
+
+	return raw;
+
+}
+
 //this is problematic.
 __declspec(naked) NiNode* __stdcall NiNode::Create(const char *nameStr)	//	str of NiFixedString
 {
@@ -408,10 +428,9 @@ __declspec(naked) NiNode* __stdcall NiNode::Create(const char *nameStr)	//	str o
 	}
 }
 
-NiNode* NiNode::pCreate(const char* nameStr)
+NiNode* NiNode::nCreate(const char* nameStr)
 {
 	NiNode* node = StdCall<NiNode*>(0xA5F030);
-	//NiRefPtr<NiNode> node(raw, adopt_ref);
 
 	if (nameStr) {
 		node->m_blockName = NiFixedString(nameStr);
@@ -419,10 +438,30 @@ NiNode* NiNode::pCreate(const char* nameStr)
 	return node;
 }
 
-NiNode* NiNode::pCreate(const NiFixedString& nameStr)
+NiNode* NiNode::nCreate(const NiFixedString& nameStr)
 {
 	NiNode* node = StdCall<NiNode*>(0xA5F030);
-	//NiRefPtr<NiNode> node(raw, adopt_ref);
+
+	if (nameStr) {
+		node->m_blockName = NiFixedString(nameStr);
+	}
+	return node;
+}
+
+NiRefPtr<NiNode> NiNode::pCreate(const char* nameStr)
+{
+
+	NiRefPtr<NiNode> node(StdCall<NiNode*>(0xA5F030), adopt_ref);
+
+	if (nameStr) {
+		node->m_blockName = NiFixedString(nameStr);
+	}
+	return node;
+}
+
+NiRefPtr<NiNode> NiNode::pCreate(const NiFixedString& nameStr)
+{
+	NiRefPtr<NiNode> node(StdCall<NiNode*>(0xA5F030), adopt_ref);
 
 	if (nameStr) {
 		node->m_blockName = nameStr;

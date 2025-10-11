@@ -2096,6 +2096,32 @@ public:
 		return false;
 	}
 
+	void RemoveUnorderedAt(UInt32 index)
+	{
+		if (index >= numItems) return;
+		UInt32 last = numItems - 1;
+		if (index != last) {
+			if constexpr (std::is_trivially_copyable_v<T_Data>) {
+				// For pointers/scalars: plain copy is fine.
+				data[index] = data[last];
+			}
+			else {
+				// Destroy target slot, move-construct from last,
+				// then destroy the moved-from last.
+				data[index].~T_Data();
+				new (data + index) T_Data(std::move(data[last]));
+				data[last].~T_Data();
+			}
+		}
+		else {
+			// Removing the last element itself
+			if constexpr (!std::is_trivially_destructible_v<T_Data>) {
+				data[last].~T_Data();
+			}
+		}
+		numItems = last; // shrink
+	}
+
 	bool Remove(Data_Arg item)
 	{
 		if (numItems)

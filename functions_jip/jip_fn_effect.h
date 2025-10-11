@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 DEFINE_COMMAND_PLUGIN(GetNumEffects, 0, kParams_OneMagicItem);
 DEFINE_COMMAND_PLUGIN(GetNthEffectBase, 0, kParams_OneMagicItem_OneInt);
@@ -29,6 +29,9 @@ DEFINE_COMMAND_PLUGIN(SetBaseEffectScript, 0, kParams_TwoForms);
 DEFINE_CMD_COND_PLUGIN(IsSpellTargetAlt, 1, kParams_OneMagicItem);
 DEFINE_COMMAND_PLUGIN(CastImmediate, 1, kParams_OneMagicItem_OneOptionalActor);
 DEFINE_CMD_COND_PLUGIN(IsSpellTargetList, 1, kParams_FormList);
+
+DEFINE_COMMAND_PLUGIN_EXP(GetActiveEffectsInfo, true, kParams_OneOptionalBasicType_OneOptionalInt);
+DEFINE_COMMAND_PLUGIN(SetActiveEffectsInfo, true, kParams_OneInt);
 
 bool Cmd_GetNumEffects_Execute(COMMAND_ARGS)
 {
@@ -311,6 +314,17 @@ bool Cmd_GetIsPoison_Execute(COMMAND_ARGS)
 	return true;
 }
 
+TESForm* isActiveEffectFlags(ActiveEffect* effect, UInt32 filterFlags) {
+	if (effect && effect->bActive && !effect->bTerminated && effect->magicItem && ((effect->magnitude > 0) || (effect->effectItem->setting->effectFlags & 0x100)))
+	{
+		if (TESForm* form = DYNAMIC_CAST(effect->magicItem, MagicItem, TESForm); form && (!filterFlags || ((form->typeID & filterFlags) == filterFlags)))
+		{
+			return form;
+		}
+	}
+	return nullptr;
+}
+
 bool Cmd_GetActiveEffects_Execute(COMMAND_ARGS)
 {
 	UInt32 filter = 7;
@@ -322,14 +336,207 @@ bool Cmd_GetActiveEffects_Execute(COMMAND_ARGS)
 	TempElements *tmpElements = GetTempElements();
 	do
 	{
-		if (ActiveEffect *activeEff = iter->data; activeEff && activeEff->bActive && !activeEff->bTerminated &&
-			activeEff->magicItem && ((activeEff->magnitude > 0) || (activeEff->effectItem->setting->effectFlags & 0x100)))
-			if (TESForm *form = DYNAMIC_CAST(activeEff->magicItem, MagicItem, TESForm); form && (!filter || ((form->typeID & filter) == filter)))
+		if (ActiveEffect* activeEff = iter->data; TESForm* form = isActiveEffectFlags(activeEff, filter))
+		{
+			if (form)
+			{
 				tmpElements->InsertUnique(form);
+			}
+		}
+
 	}
 	while (iter = iter->next);
 	if (!tmpElements->Empty())
 		*result = (int)CreateArray(tmpElements->Data(), tmpElements->Size(), scriptObj);
+	return true;
+}
+
+namespace OBS_Details {
+
+	enum ActiveEffectFilter {
+		None = 0,
+		ObjectFilter = 1,
+		ActorEffectFilter = 2,
+		Ingestible = 3,
+	};
+
+	static inline UInt32 MapFilterToTypeID(ActiveEffectFilter filter) {
+		switch (filter) {
+		case ActiveEffectFilter::ObjectFilter:      return kFormType_EnchantmentItem;
+		case ActiveEffectFilter::ActorEffectFilter: return kFormType_SpellItem;
+		case ActiveEffectFilter::Ingestible:        return kFormType_AlchemyItem;
+		default:									return 0; // no restriction
+		}
+	}
+
+	std::array<ArrayElementL, 8> __fastcall makeScriptMetaStruct(ActiveEffect* activeEffect, TESForm* actorEffect)
+	{
+		return {
+			ArrayElementL(static_cast<double>(reinterpret_cast<uintptr_t>(activeEffect))), // [0] meta id
+			ArrayElementL(actorEffect),						// [1] target (MagicItem as TESForm)
+			ArrayElementL(activeEffect->getCasterForm()),		// [2] caster
+			ArrayElementL(activeEffect->getBaseMGEF()),			// [3] base MGEF
+			ArrayElementL(activeEffect->computedMagnitude()),	// [4] magnitude (or insert sourceForm here if you want)
+			ArrayElementL(activeEffect->timeLeft()),			// [5] timeLeft
+			ArrayElementL(activeEffect->duration),				// [6] duration
+			ArrayElementL(activeEffect->flags),					// [7] flags (store as number)
+
+		};
+	}
+
+	enum SetAEChanged : UInt32 {
+		kChanged_None = 0,
+		kChanged_Magnitude = 1 << 0,
+		kChanged_TimeLeft = 1 << 1, // we store as timeElapsed, but track intent
+		kChanged_Duration = 1 << 2,
+		kChanged_Flags = 1 << 3,
+	};
+
+	static inline bool nearly_equal(float a, float b, float eps = 1e-6f) {
+		return std::fabs(a - b) <= eps * max(1.0f, max(std::fabs(a), std::fabs(b)));
+	}
+
+	UInt32 __fastcall setFromScriptMetaStruct(ActiveEffect* activeEffect, NVSEArrayVar* arrayVar) {
+
+		ArrayElementL ptr;
+		if (!GetElement(arrayVar, ArrayElementL("MetaData"), ptr)) {
+			return kChanged_None;
+		}
+		if ((reinterpret_cast<void*>(static_cast<uintptr_t>(ptr.num))) != activeEffect) {
+			return kChanged_None;
+		}
+
+		bool hasMag = false, hasTimeLeft = false, hasDur = false, hasFlags = false;
+		float vMag = 0.f, vTimeLeft = 0.f, vDur = 0.f;
+		UInt32 vFlags = 0;
+
+		ArrayElementL ev;
+		if (GetElement(arrayVar, ArrayElementL("Magnitude"), ev)) { hasMag = true; vMag = static_cast<float>(ev.num); }
+		if (GetElement(arrayVar, ArrayElementL("TimeLeft"), ev)) { hasTimeLeft = true; vTimeLeft = static_cast<float>(ev.num); }
+		if (GetElement(arrayVar, ArrayElementL("Duration"), ev)) { hasDur = true; vDur = max(0.0f, static_cast<float>(ev.num)); }
+		if (GetElement(arrayVar, ArrayElementL("Flags"), ev)) { hasFlags = true; vFlags = static_cast<UInt32>(ev.num); }
+
+		// Sanitize NaNs/infinities coming from script
+		auto sane = [](float x, float fallback) { return std::isfinite(x) ? x : fallback; };
+		vMag = sane(vMag, activeEffect->magnitude);
+		vTimeLeft = sane(vTimeLeft, activeEffect->duration - activeEffect->timeElapsed);
+		vDur = sane(vDur, activeEffect->duration);
+
+		UInt32 changed = kChanged_None;
+
+		// Duration first (affects timeLeft→timeElapsed conversion)
+		if (hasDur && !nearly_equal(activeEffect->duration, vDur)) {
+			activeEffect->setDuration(vDur);
+			changed |= kChanged_Duration;
+		}
+
+		// TimeLeft (store as timeElapsed)
+		if (hasTimeLeft) {
+			if (!nearly_equal(activeEffect->timeElapsed, vTimeLeft)) {
+				activeEffect->setTimeLeft(vTimeLeft);
+				changed |= kChanged_TimeLeft;
+			}
+		}
+
+		// Magnitude
+		if (hasMag && !nearly_equal(activeEffect->magnitude, vMag)) {
+			activeEffect->magnitude = vMag;
+			changed |= kChanged_Magnitude;
+		}
+
+		// Flags (integer compare)
+		if (hasFlags && activeEffect->flags != vFlags) {
+			activeEffect->flags = vFlags;
+			changed |= kChanged_Flags;
+		}
+
+		return changed;
+
+	}
+
+	const char* activeEffectMetaStructStrings[] = { "MetaData", "Form", "Caster", "BaseEffect", "Magnitude", "TimeLeft", "Duration", "Flags" };
+
+}
+
+bool Cmd_GetActiveEffectsInfo_Execute(COMMAND_ARGS)
+{
+	UInt8 tempEffects = 2;
+	OBS_Details::ActiveEffectFilter effectFilter = OBS_Details::ActiveEffectFilter::None;
+	TESForm* formFilter = nullptr;
+
+	PluginExpressionEvaluator eval(PASS_COMMAND_ARGS);
+	if (!eval.ExtractArgs() || NOT_ACTOR(thisObj)) return true;
+
+	UInt32 typeIDFilter = 0;
+	if (eval.NumArgs() >= 1) {
+		if (eval.GetNthArg(0)->IsFormLike()) {
+			formFilter = eval.GetNthArg(0)->GetTESForm();
+			typeIDFilter = formFilter->typeID;
+		}
+		else if (eval.GetNthArg(0)->IsNumericLike()) {
+			effectFilter = static_cast<OBS_Details::ActiveEffectFilter>(eval.GetNthArg(0)->GetUInt());
+			if (eval.NumArgs() >= 2) {
+				tempEffects = eval.GetNthArg(1)->GetUInt();
+			}
+			typeIDFilter = MapFilterToTypeID(effectFilter);
+		}
+	}
+
+
+	auto iter = ((Actor*)thisObj)->magicTarget.GetEffectList()->Head();
+	if (!iter) return true;
+	TempElements* tmpElements = GetTempElements();
+	do
+	{
+		if (ActiveEffect* activeEff = iter->data) {
+
+			if (TESForm* effect = activeEff->getActiveEffect(typeIDFilter, tempEffects); effect && (!formFilter || formFilter == effect)) {
+				auto metaStruct = OBS_Details::makeScriptMetaStruct(activeEff, effect);
+				tmpElements->Append(CreateStringMap(OBS_Details::activeEffectMetaStructStrings, metaStruct.data(), 8, scriptObj));
+			}
+
+		}
+
+	} while (iter = iter->next);
+
+	if (!tmpElements->Empty()) {
+		*result = (int)CreateArray(tmpElements->Data(), tmpElements->Size(), scriptObj);
+	}
+
+	return true;
+}
+
+//Takes an array from GetActiveEffectsInfo
+bool Cmd_SetActiveEffectsInfo_Execute(COMMAND_ARGS) {
+
+
+	UInt32 arrID;
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &arrID) || !arrID || NOT_ACTOR(thisObj)) return true;
+
+	NVSEArrayVar* arrayVar = LookupArrayByID(arrID);
+	if (!arrayVar) return true;
+
+	for (auto iter = ((Actor*)thisObj)->magicTarget.GetEffectList()->Head(); iter; iter = iter->next) {
+
+		const UInt32 n = GetArraySize(arrayVar);
+		for (UInt32 i = 0; i < n; ++i) {
+
+			ArrayElementL index(i), val;
+			if (GetElement(arrayVar, index, val)) {
+
+				if (ActiveEffect* activeEff = iter->data) {
+					if (!val.IsArray()) {
+						continue;
+					}
+					OBS_Details::setFromScriptMetaStruct(activeEff, val.GetArray());
+				}
+
+			}
+
+		}
+
+	}
+
 	return true;
 }
 

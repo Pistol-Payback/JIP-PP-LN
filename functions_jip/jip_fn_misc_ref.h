@@ -114,6 +114,11 @@ DEFINE_COMMAND_PLUGIN_EXP(ClearRuntimeNodes, false, kParams_OneForm_OneOptionalI
 
 DEFINE_COMMAND_PLUGIN_EXP(ClampToGround, false, nullptr);
 
+DEFINE_COMMAND_ALT_PLUGIN(SynchronizePositionAlt, SyncPosAlt, true, kParams_OneOptionalInt_OneOptionalObjectRef_OneOptionalString_OneOptionalInt);
+DEFINE_COMMAND_ALT_PLUGIN(ModSynchronizedPosition, ModSyncedPos, true, kParams_ThreeFloats_OneOptionalInt);
+DEFINE_COMMAND_ALT_PLUGIN(IsSynchronized, IsSynced, false, kParams_OneOptionalObjectRef);
+DEFINE_COMMAND_ALT_PLUGIN(GetSynchronizedChildren, GetSyncedChildren, true, nullptr);
+
 bool Cmd_SetPersistent_Execute(COMMAND_ARGS)
 {
 	UInt32 doSet;
@@ -755,8 +760,10 @@ bool Cmd_SetPosEx_Execute(COMMAND_ARGS)
 
 bool Cmd_ClampToGround_Execute(COMMAND_ARGS)
 {
-	thisObj->ClampToGround();
-	thisObj->SetPos(thisObj->position);
+	if (thisObj) {
+		thisObj->ClampToGround();
+		thisObj->SetPos(thisObj->position);
+	}
 	return true;
 }
 
@@ -1084,9 +1091,12 @@ bool Cmd_SetNifBlockTranslation_Execute(COMMAND_ARGS)
 				if NOT_ACTOR(thisObj)
 					((NiNode*)niBlock)->ResetCollision();
 			}
-			else if IS_TYPE(niBlock, NiPointLight)
-				if (NiPointLight* ptLight = (NiPointLight*)niBlock; ptLight->extraFlags & 1)
-					ptLight->vector100 = transltn;
+			else if IS_TYPE(niBlock, NiPointLight) {
+				if (NiPointLight* ptLight = (NiPointLight*)niBlock) {
+					ptLight->setAnimatedLightTranslation(transltn);
+				}
+			}
+
 			niBlock->UpdateDownwardPass(kNiUpdateData, 0);
 		}
 	return true;
@@ -1206,8 +1216,8 @@ bool Cmd_SetNifBlockFlag_Execute(COMMAND_ARGS)
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &flagID, &doSet, &playerNode) && (flagID <= 26))
 		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
 		{
-			if (doSet) niBlock->m_flags |= (1 << flagID);
-			else niBlock->m_flags &= ~(1 << flagID);
+			if (doSet) niBlock->m_flags.set(BIT(flagID));
+			else niBlock->m_flags.remove(BIT(flagID));
 		}
 	return true;
 }
@@ -1474,7 +1484,7 @@ bool Cmd_AttachLight_Execute(COMMAND_ARGS)
 		{
 			NiPointLight *pointLight = CreatePointLight(lightForm, objNode);
 			pointLight->LocalTranslate() = offsetMod;
-			pointLight->extraFlags |= 0x80;
+			pointLight->extraFlags.setFromScript(true);
 			*result = 1;
 		}
 	return true;
@@ -1489,7 +1499,7 @@ bool Cmd_RemoveLight_Execute(COMMAND_ARGS)
 			NiPointLight *pointLight;
 			for (auto& child : objNode->m_children)
 			{
-				if (!(pointLight = (NiPointLight*)child) || NOT_TYPE(pointLight, NiPointLight) || !(pointLight->extraFlags & 0x80))
+				if (!(pointLight = (NiPointLight*)child) || NOT_TYPE(pointLight, NiPointLight) || !(pointLight->extraFlags.isFromScript()))
 					continue;
 				objNode->RemoveObject(pointLight);
 				break;
@@ -1621,24 +1631,19 @@ bool __fastcall RegisterInsertObject_New(InsertObjectParams* inData) {
 
 bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 {
-	//InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
 	InsertObjectParams* params = new InsertObjectParams;
-	//if (ExtractArgsEx(EXTRACT_ARGS_EX, &params->form, &params->mode, &params->pathSpec))
 	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, &params->form, &params->mode))
 	{
-		//params->hookFlag = kHookFormFlag6_InsertNode;
 		params->hookFlag = InsertObjectParams::registerMode::kInsertNode;
+		params->modIndex = scriptObj->modIndex;
 		if (!(params->isInstant()) || IsInMainThread())
 		{
-			//if (RegisterInsertObject_Old((char*)params))
 			if (RegisterInsertObject_New(params)) {
 				*result = 1;
 			}
 		}
-		//else MainLoopAddCallback(RegisterInsertObject_Old, params);
 		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
 	}
-	//else { Pool_CFree<InsertObjectParams>(params); }
 	else { delete params; }
 
 	return true;
@@ -1646,22 +1651,20 @@ bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 
 bool Cmd_AttachModel_Execute(COMMAND_ARGS)
 {
-	//InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
 	InsertObjectParams* params = new InsertObjectParams;
 	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, &params->form, &params->mode))
 	{
 
 		params->hookFlag = InsertObjectParams::registerMode::kAttachModel;
+		params->modIndex = scriptObj->modIndex;
 		if (!(params->isInstant()) || IsInMainThread())
 		{
-			//if (RegisterInsertObject_Old((char*)params))
 			if (RegisterInsertObject_New(params)) {
 				*result = 1;
 			}
 		}
 		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
 	}
-	//else { Pool_CFree<InsertObjectParams>(params); }
 	else { delete params; }
 
 	return true;
@@ -1670,7 +1673,6 @@ bool Cmd_AttachModel_Execute(COMMAND_ARGS)
 //Version 57.48
 bool Cmd_AttachFormModel_Execute(COMMAND_ARGS)
 {
-	//InsertObjectParams* params = Pool_CAlloc<InsertObjectParams>();
 	InsertObjectParams* params = new InsertObjectParams;
 	if (ExtractFormatStringArgs(3, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachFormModel.numParams, &params->form, &params->toAttachForm, &params->mode))
 	{
@@ -1684,43 +1686,170 @@ bool Cmd_AttachFormModel_Execute(COMMAND_ARGS)
 		}
 		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
 	}
-	//else { Pool_CFree<InsertObjectParams>(params); }
 	else { delete params; }
 
 	return true;
 }
 
+//legacy function
 bool Cmd_SynchronizePosition_Execute(COMMAND_ARGS)
 {
 	TESObjectREFR *targetRef = nullptr;
 	UInt32 syncRot = 0;
-	s_syncPositionMods.z = 0;
-	char nodeName[0x40];
-	nodeName[0] = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &targetRef, &syncRot, &s_syncPositionMods.z, &nodeName))
-	{
-		TESObjectCELL *cell;
-		if (targetRef)
-		{
-			if (g_thePlayer->GetDistance(targetRef) > 1024.0F)
-			{
-				cell = targetRef->GetParentCell();
-				if (cell) g_thePlayer->MoveToCell(cell, targetRef->position);
-			}
-			s_syncPositionFlags = (syncRot != 0);
-			s_syncPositionPos.SetPS(targetRef->position.PS3());
-			s_syncPositionNode() = nodeName;
-			s_syncPositionRef = targetRef;
-		}
-		else if (targetRef = s_syncPositionRef)
-		{
-			s_syncPositionRef = nullptr;
-			cell = targetRef->GetParentCell();
-			if (cell) g_thePlayer->MoveToCell(cell, s_syncPositionPos);
-		}
+	NiVector3 modPos = {};
+	char nodeName[0x40] = {};
+
+	*result = 0;
+
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &targetRef, &syncRot, &modPos.z, &nodeName)) {
+		return true;
 	}
+
+	TESObjectREFR* childRef = thisObj ? thisObj : g_thePlayer;
+
+	if (targetRef) {
+		pBitMask<UInt8> flags{};
+		flags.assign((syncRot ? ChildBinding::kIncludeRot : 0) | ChildBinding::kChildController);
+
+		NiBlockPathBase blockPath(nodeName);
+		*result = syncPosManager.attachRef(targetRef, childRef, blockPath, modPos, flags);
+
+	}
+	else {
+		*result = syncPosManager.detachChild(childRef);
+	}
+
 	return true;
 }
+
+enum {
+    kSyncPos_Remove						= 0,
+    kSyncPos_InsertPrimaryParent        = 1, // parent controls
+    kSyncPos_InsertPrimaryChild         = 2, // child controls
+    kSyncPos_InsertPrimaryParentRot     = 3, // parent controls + rot
+    kSyncPos_InsertPrimaryChildRot      = 4  // child controls + rot
+};
+
+bool Cmd_SynchronizePositionAlt_Execute(COMMAND_ARGS)
+{
+	UInt32 syncMode = 0;
+	TESObjectREFR* parentRef = nullptr;
+	UInt32 autoClean = 1;
+	char formattedNode[0x40] = {};
+
+	NiVector3 modPos = {};
+	*result = 0;
+
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &syncMode, &parentRef, &formattedNode, &autoClean)) {
+		return true;
+	}
+
+	if (!thisObj) {
+		return false;
+	}
+
+	if (syncMode) {
+
+		const char* outPath = nullptr;
+		const char* outSuffix = nullptr;
+		const char* nop = nullptr; //NotUsed
+		FormRuntimeModelManager::formatString(formattedNode, outPath, nop, outSuffix);
+		if (!outPath) {
+			outPath = nop;
+		}
+
+		const bool includeRot = (syncMode >= kSyncPos_InsertPrimaryParentRot);
+		const bool childControls = (syncMode == kSyncPos_InsertPrimaryChild || syncMode == kSyncPos_InsertPrimaryChildRot);
+
+		pBitMask<UInt8> flags{};
+		flags.assign((includeRot ? ChildBinding::kIncludeRot : 0) | (childControls ? ChildBinding::kChildController : 0) | (autoClean ? ChildBinding::kAutoClean : 0));
+
+
+		NiBlockPathBase blockPath(outPath);
+		*result = syncPosManager.attachRef(parentRef, thisObj, blockPath, modPos, flags);
+
+	}
+	else {
+		*result = syncPosManager.detachChild(thisObj);
+	}
+
+	return true;
+}
+
+bool Cmd_ModSynchronizedPosition_Execute(COMMAND_ARGS) {
+
+	NiVector3 modPos = {};
+	UInt32 transform = 0;
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &modPos.x, &modPos.y, &modPos.z, &transform)) {
+		return true;
+	}
+
+	if (!thisObj) {
+		return false;
+	}
+
+	if (ChildBinding* binding = syncPosManager.getIsChildBinding(thisObj)) {
+		if (!transform) {
+			binding->modPosition = modPos;
+		}
+		else if (transform == 2) {
+			binding->modPosition += modPos.PS();
+		}
+	}
+
+	syncPosManager.detachChild(thisObj);
+	return true;
+
+}
+
+bool Cmd_IsSynchronized_Execute(COMMAND_ARGS) {
+
+	TESForm* parent = nullptr;
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &parent)) {
+		return true;
+	}
+
+	if (thisObj) {
+		if (ChildBinding* child = syncPosManager.getIsChildBinding(thisObj)) {
+			*result = 1;
+			if (parent) {
+				*result += child->parent->parentRef->refID != parent->refID; //2 means object is syned, but not to the passed parent.
+			}
+		}
+	}
+	else {
+		*result = syncPosManager.getIsParent(thisObj) != nullptr;
+	}
+
+
+	return true;
+
+}
+
+bool Cmd_GetSynchronizedChildren_Execute(COMMAND_ARGS) {
+
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX)) {
+		return true;
+	}
+
+	if (!thisObj) {
+		return false;
+	}
+
+	SyncNode* node = syncPosManager.getIsParent(thisObj);
+
+	NVSEArrayVar* outArray = CreateArray(nullptr, 0, scriptObj); //Maybe set the size of the array upfront.
+	if (!outArray) return true;
+
+	for (auto child : node->children) {
+		AppendElement(outArray, ArrayElementL(child->childRef));
+	}
+
+	*result = (int)outArray;
+	return true;
+
+}
+
 
 bool Cmd_ModelHasBlock_Execute(COMMAND_ARGS)
 {
@@ -2527,6 +2656,8 @@ bool Cmd_SetRefExtraData_Execute(COMMAND_ARGS)
 	if (modIdx == 0xFF) return true;
 	if (PluginExpressionEvaluator eval(PASS_COMMAND_ARGS); eval.ExtractArgs())
 	{
+		Console_Print("%s from mod %s is creating extra data", scriptObj->GetEditorID(), g_dataHandler->GetNthModName(modIdx));
+
 		UInt32 varIdx;
 		PluginScriptToken *tIndex = eval.GetNthArg(0), *tValue;
 		if (tIndex)

@@ -103,13 +103,50 @@ public:
 
 	struct RenderState
 	{
-		TESObjectREFR	*currWaterRef;		// 00
-		UInt32			underwaterCount;	// 04	0-0x13 when fully-underwater; exterior only
-		float			waterLevel;			// 08
-		float			revealDistance;		// 0C
-		UInt32			flags;				// 10
-		NiNode			*rootNode;			// 14
-		bhkPhantom		*phantom;			// 18	Used with trigger volume
+
+		enum {
+			kFlags_Unk0 = BIT(0),
+			kFlags_Unk1 = BIT(1),  // OBSERVED: player had flags==2 -> this bit set
+			kFlags_Unk2 = BIT(2),
+			kFlags_Unk3 = BIT(3),
+
+			//Custom
+			kFlags_syncNode = BIT(30),
+			kFlags_noUpdate = BIT(31),
+		};
+
+		TESObjectREFR		*currWaterRef;		// 00
+		UInt32				underwaterCount;	// 04	0-0x13 when fully-underwater; exterior only
+		float				waterLevel;			// 08
+		float				revealDistance;		// 0C
+		pBitMask<UInt32>	flags;				// 10
+		NiNode				*rootNode;			// 14
+		bhkPhantom			*phantom;			// 18	Used with trigger volume
+
+		inline void setSyncFlag() {
+			flags.set(kFlags_syncNode);
+		}
+
+		inline void removeSyncFlag() {
+			flags.remove(kFlags_syncNode);
+		}
+
+		inline bool hasSyncFlag() {
+			return flags.hasAll(kFlags_syncNode);
+		}
+
+		inline void setNoUpdateFlag() {
+			flags.set(kFlags_noUpdate);
+		}
+
+		inline void removeNoUpdateFlag() {
+			flags.remove(kFlags_noUpdate);
+		}
+
+		inline bool hasNoUpdateFlag() {
+			return flags.hasAll(kFlags_noUpdate);
+		}
+
 	};
 
 	TESChildCell	childCell;		// 18
@@ -286,25 +323,25 @@ typedef tList<ActiveEffect> ActiveEffectList;
 class MagicCaster
 {
 public:
-	/*000*/virtual void		AddAbility(SpellItem *splItem, bool arg2);
-	/*004*/virtual void		AddAddiction(SpellItem *splItem, bool arg2);
-	/*008*/virtual void		AddEffect(SpellItem *splItem, bool arg2);
-	/*00C*/virtual void		CastSpell(MagicItem *spell, bool arg2, MagicTarget *target, float arg4, bool arg5);
-	/*010*/virtual void		AddDisease(SpellItem *splItem, MagicTarget *target, bool arg3);
-	/*014*/virtual void		AddFormEffects(MagicItem *magItem, MagicItemForm *itemForm, bool arg3);
+	/*000*/virtual void			AddAbility(SpellItem *splItem, bool arg2);
+	/*004*/virtual void			AddAddiction(SpellItem *splItem, bool arg2);
+	/*008*/virtual void			AddEffect(SpellItem *splItem, bool arg2);
+	/*00C*/virtual void			CastSpell(MagicItem *spell, bool arg2, MagicTarget *target, float arg4, bool arg5);
+	/*010*/virtual void			AddDisease(SpellItem *splItem, MagicTarget *target, bool arg3);
+	/*014*/virtual void			AddFormEffects(MagicItem *magItem, MagicItemForm *itemForm, bool arg3);
 	/*018*/virtual MagicTarget	*PickMagicTarget();
-	/*01C*/virtual void		Unk_07();
-	/*020*/virtual void		Unk_08();
-	/*024*/virtual void		Unk_09(UInt32 arg1, UInt32 arg2);
-	/*028*/virtual bool		Unk_0A(UInt32 arg1, float *arg2, UInt32 *arg3, UInt32 arg4);
-	/*02C*/virtual Actor	*GetActor();
-	/*030*/virtual NiNode	*GetMagicNode();
+	/*01C*/virtual void			Unk_07();
+	/*020*/virtual void			Unk_08();
+	/*024*/virtual void			Unk_09(UInt32 arg1, UInt32 arg2);
+	/*028*/virtual bool			Unk_0A(UInt32 arg1, float *arg2, UInt32 *arg3, UInt32 arg4);
+	/*02C*/virtual Actor		*GetActor();
+	/*030*/virtual NiNode		*GetMagicNode();
 	/*034*/virtual MagicItem	*GetMagicItem();
-	/*038*/virtual bool		Unk_0E(ActiveEffect *activeEffect);
-	/*03C*/virtual float	Unk_0F(UInt8 arg1, float arg2);
-	/*040*/virtual void		SetMagicItem(MagicItem *spell);
+	/*038*/virtual bool			Unk_0E(ActiveEffect *activeEffect);
+	/*03C*/virtual float		Unk_0F(UInt8 arg1, float arg2);
+	/*040*/virtual void			SetMagicItem(MagicItem *spell);
 	/*044*/virtual MagicTarget	*GetMagicTarget();
-	/*048*/virtual void		SetMagicTarget(MagicTarget *magicTarget);
+	/*048*/virtual void			SetMagicTarget(MagicTarget *magicTarget);
 	/*04C*/virtual ActiveEffect	*CreateActiveEffect(MagicItem *magicItem, EffectItem *effItem, TESForm *itemForm);
 
 	UInt32	unk04[2];	// 04

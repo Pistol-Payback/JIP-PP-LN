@@ -80,7 +80,7 @@ void NiNode::removeRuntimeChild(const NiRuntimeNode& toRemove) {
 	}
 
 	if (!removeChild) {
-		Console_Print("removeRuntimeChild JIP Error, couldn't find the runtime child");
+		Console_Print("JIP::removeRuntimeChild error, couldn't find the runtime child for runtime node: %s", toRemove.originToDebugString().c_str());
 		return;
 	}
 
@@ -107,7 +107,7 @@ void NiNode::removeRuntimeParent(const NiRuntimeNode& toRemove) {
 
 			NiNode* child = (NiNode*)DeepSearchBySparsePath(toRemove.sparsePath);
 			if (!child || child == this) {
-				Console_Print("removeRuntimeParent JIP Error, couldn't find a valid child");
+				Console_Print("JIP::removeRuntimeParent error, couldn't find a valid child: %s", toRemove.originToDebugString().c_str());
 				return;
 			}
 
@@ -118,7 +118,7 @@ void NiNode::removeRuntimeParent(const NiRuntimeNode& toRemove) {
 	}
 
 	if (!removeParent) {
-		Console_Print("removeRuntimeParent JIP Error, couldn't find the runtime parent to remove");
+		Console_Print("JIP::removeRuntimeParent JIP Error, couldn't find the runtime parent to remove: %s", toRemove.originToDebugString().c_str());
 		return;
 	}
 
@@ -160,6 +160,9 @@ inline void NiNode::collapseRuntimeNode() {
 
 void NiPointLight::SetLightProperties(TESObjectLIGH* lightForm)
 {
+	if (!lightForm) {
+		return;
+	}
 	// Fade distance comes straight from the form’s fadeValue (at 0xB4)
 	fadeValue = lightForm->fadeValue;
 
@@ -200,8 +203,8 @@ void NiPointLight::initLightBlock(NiNode* rootNode) {
 
 					if (auto* form = LookupFormByEDID(edid); form && form->typeID == kFormType_TESObjectLIGH)
 					{
-						rootNode->m_flags |= NiAVObject::kNiFlag_IsPointLight;
-						this->m_flags |= NiAVObject::kNiFlag_IsPointLight;
+						rootNode->m_flags.set(NiAVObject::kNiFlag_IsPointLight);
+						this->m_flags.set(NiAVObject::kNiFlag_IsPointLight);
 						this->baseLight = (TESObjectLIGH*)form;
 
 						for (NiAVObject* parent = this->m_parent; parent && parent != rootNode; parent = parent->m_parent) {
@@ -209,7 +212,7 @@ void NiPointLight::initLightBlock(NiNode* rootNode) {
 							if (parent->m_flags & NiAVObject::kNiFlag_IsPointLight)
 								break;
 
-							parent->m_flags |= NiAVObject::kNiFlag_IsPointLight;
+							parent->m_flags.set(NiAVObject::kNiFlag_IsPointLight);
 						}
 
 					}
@@ -251,13 +254,12 @@ void NiNode::AddPointLights()
 			// only once per light
 			if (!(light->m_flags & NiAVObject::kNiFlag_DoneInitLights)) {
 				// mark as done
-				light->m_flags |= NiAVObject::kNiFlag_DoneInitLights;
+				light->m_flags.set(NiAVObject::kNiFlag_DoneInitLights);
 
 				// decide on/off based on its baseLight form‑flag
-				if (light->baseLight &&
-					(light->baseLight->jipFormFlags6 & TESObjectLIGH::kFlag_OffByDefault) == 0)
+				if (light->baseLight && (light->baseLight->jipFormFlags6 & TESObjectLIGH::kFlag_OffByDefault) == 0)
 				{
-					light->m_flags |= NiAVObject::kNiFlag_DisplayObject;
+					light->m_flags.set(NiAVObject::kNiFlag_DisplayObject);
 				}
 
 				// pass the form pointer into SetLightProperties
@@ -401,11 +403,16 @@ NiAVObject* TESObjectREFR::findNodeByName(GetRootNodeMask which, const char* blo
 		};
 
 	if (IsPlayer()) {
+
+		if (which == GetRootNodeMask::kNone) {
+			which.assign(PlayerCharacter::getCameraState());
+		}
+
 		// 3rd-person
-		if (which.has(GetRootNodeMask::kThirdPerson)) {
+		if (which.hasAll(GetRootNodeMask::kThirdPerson)) {
 			if (auto* root3 = renderState ? renderState->rootNode : nullptr) {
 				if (auto* found = search(root3)) {
-					if (which.has(GetRootNodeMask::kFirstPerson) == false) {
+					if (which.hasAll(GetRootNodeMask::kFirstPerson) == false) {
 						return found;
 					}
 				}
@@ -413,7 +420,7 @@ NiAVObject* TESObjectREFR::findNodeByName(GetRootNodeMask which, const char* blo
 			}
 		}
 		// 1st-person
-		if (which.has(GetRootNodeMask::kFirstPerson)) {
+		if (which.hasAll(GetRootNodeMask::kFirstPerson)) {
 			if (auto* root1 = static_cast<PlayerCharacter*>(this)->node1stPerson) {
 				if (auto* found = search(root1)) {
 					return found;

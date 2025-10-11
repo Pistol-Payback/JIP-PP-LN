@@ -2303,11 +2303,8 @@ __declspec(noinline) void __cdecl RunDialogTopicEvents(TESTopicInfo* info, UInt3
 	}
 }
 
-// ----- Trampoline site specifics -----
-// We’re hooked at 0x61F184 and must:
-//   run our helper
-//   replicate:  mov eax,[ebp+8]; push eax; mov ecx,[ebp-0xC]; call 0x61EB60
-//   jump back to 0x61F190 (right after the original call)
+// ----- Trampoline -----
+// We’re hooked at 0x61F184:
 __declspec(naked) void RunResultScriptHook()
 {
 	__asm {
@@ -2942,6 +2939,7 @@ __declspec(naked) const char* __fastcall TESObjectLIGHGetEDIDHook(TESObjectLIGH 
 	}
 }
 
+
 // Recursive helper: `node` is the subtree to visit, `parent` is
 // the original node you want to use when initializing each light
 void __fastcall InitPointLightsIter(NiNode* node, NiNode* parent)
@@ -2990,6 +2988,8 @@ void __fastcall InitPointLights(NiNode* rootNode)
 }
 
 /*
+TempObject<NiFixedString> s_LIGH_EDID_OLD = "LIGH_EDID";
+
 __declspec(naked) void __fastcall InitPointLights(NiNode *niNode)
 {
 	__asm
@@ -3021,7 +3021,7 @@ __declspec(naked) void __fastcall InitPointLights(NiNode *niNode)
 		push	ebx
 		mov		ebx, [ecx+0x10]
 		movzx	eax, word ptr [ecx+0x14]
-		mov		edx, s_LIGH_EDID
+		mov		edx, s_LIGH_EDID_OLD
 		ALIGN 16
 	xtraIter:
 		dec		eax
@@ -3124,6 +3124,52 @@ __declspec(naked) NiPointLight* __fastcall DestroyNiPointLightHook(NiPointLight 
 
 TempObject<Vector<NiPointLight*>> s_activePtLights(0x40);
 
+static NiPointLight* FindExistingPointLight(NiNode* parent)
+{
+	if (!parent) return nullptr;
+	UInt16 count = parent->m_children.firstFreeEntry;
+	NiAVObject** arr = parent->m_children.data;
+	for (UInt16 i = 0; i < count; ++i) {
+		NiAVObject* obj = arr[i];
+		if (!obj) continue;
+		if (obj->IsType(kVtbl_NiPointLight))
+			return static_cast<NiPointLight*>(obj);
+	}
+	return nullptr;
+}
+
+NiPointLight* __fastcall CreatePointLight(TESObjectLIGH* lightForm, NiNode* destParent)
+{
+	if (!destParent || !lightForm) return nullptr;
+
+	// Try to reuse a child NiPointLight
+	NiPointLight* pointLight = FindExistingPointLight(destParent);
+	if (!pointLight) {
+
+		char buf[32];
+		std::snprintf(buf, sizeof(buf), "light %08X", lightForm->refID);
+
+		pointLight = NiPointLight::Create(NiFixedString(buf));
+		destParent->AddObject(pointLight, true);
+
+	}
+
+	pointLight->baseLight = lightForm;
+	if (lightForm->lightFlags.hasAll(LightFlags::OffByDefault)) {
+		pointLight->m_flags.set(NiAVObject::kNiFlag_Hidden);
+	}
+
+	pointLight->resetTraits = true;
+	if (!(pointLight->m_flags & NiAVObject::kNiFlag_DoneInitLights)) {
+		pointLight->m_flags.set(NiAVObject::kNiFlag_DoneInitLights);
+		pointLight->m_flags.set(NiAVObject::kNiFlag_IsInserted);
+		s_activePtLights().Append(pointLight);
+	}
+
+	return pointLight;
+}
+
+/*
 __declspec(naked) NiPointLight* __fastcall CreatePointLight(TESObjectLIGH *lightForm, NiNode *destParent)
 {
 	__asm
@@ -3186,7 +3232,7 @@ __declspec(naked) NiPointLight* __fastcall CreatePointLight(TESObjectLIGH *light
 		retn
 	}
 }
-
+*/
 
 void __fastcall AddPointLights(NiNode* objNode)
 {
@@ -3820,6 +3866,7 @@ __declspec(naked) void CreateObjectNodeHook()
 	}
 }
 
+/*
 namespace ThreadTasks {
 
 	// g_TLSIndex is the index xNVSE uses for its thread‐local data block
@@ -3827,12 +3874,11 @@ namespace ThreadTasks {
 	// Within that block, the current BSTask* lives at byte offset 692.
 	static constexpr size_t kTaskOffset = 692;
 
-	/*
-	inline BSTask* GetCurrent()
-	{
-		void* tlsBase = TlsGetValue(kTlsIndex);
-		return *reinterpret_cast<BSTask**>(reinterpret_cast<uint8_t*>(tlsBase) + kTaskOffset);
-	}*/
+	//inline BSTask* GetCurrent()
+	//{
+		//void* tlsBase = TlsGetValue(kTlsIndex);
+		//return *reinterpret_cast<BSTask**>(reinterpret_cast<uint8_t*>(tlsBase) + kTaskOffset);
+	//}
 
 	inline BSTask* GetCurrent()
 	{
@@ -3846,12 +3892,11 @@ namespace ThreadTasks {
 		return *reinterpret_cast<BSTask**>(threadBlock + kTaskOffset);
 	}
 
-	/*
-	inline void SetCurrent(BSTask* t)
-	{
-		void* tlsBase = TlsGetValue(kTlsIndex);
-		*reinterpret_cast<BSTask**>(reinterpret_cast<uint8_t*>(tlsBase) + kTaskOffset) = t;
-	}*/
+	//inline void SetCurrent(BSTask* t)
+	//{
+		//void* tlsBase = TlsGetValue(kTlsIndex);
+		//*reinterpret_cast<BSTask**>(reinterpret_cast<uint8_t*>(tlsBase) + kTaskOffset) = t;
+	//}
 
 	inline void SetCurrent(BSTask* task)
 	{
@@ -3863,7 +3908,7 @@ namespace ThreadTasks {
 		*reinterpret_cast<BSTask**>(threadBlock + kTaskOffset) = task;
 	}
 }
-
+*/
 /*
 void __fastcall DoQueuedReferenceHook(QueuedReference* qr)
 {
@@ -4391,124 +4436,71 @@ __declspec(naked) void __fastcall UpdateAnimatedLightHook(TESObjectLIGH *lightFo
 	}
 }
 
-//-----------------------------------------------------------------------------
-// Raw addresses from the ASM, given names here for clarity
-//-----------------------------------------------------------------------------
-static uint32_t& g_shadowSceneFrame = *reinterpret_cast<uint32_t*>(0x11C56E8);
+struct SceneLightsScope {
+	SceneLightsScope() {
+		GameGlobals::SceneLightsLock()->Enter();
+	}
+	~SceneLightsScope() {
+		GameGlobals::SceneLightsLock()->Leave();
+	}
+};
 
-// SCENE_LIGHTS_CS is the address of a LightCS instance
-static LightCS* sceneLightsCS = reinterpret_cast<LightCS*>(SCENE_LIGHTS_CS);
-
-// Grid updater routines
-using GridUpdateFn = void(__fastcall*)(GridCellArray*);
-static GridUpdateFn UpdateExteriorCells = reinterpret_cast<GridUpdateFn>(0x4BABA0);
-static GridUpdateFn UpdateInteriorCells = reinterpret_cast<GridUpdateFn>(0x553820);
-
-// LightingData allocator/initer
-inline LightingData* AllocateLightingData()
+static inline volatile std::uint32_t& clearClonedAnimations = *reinterpret_cast<volatile std::uint32_t*>(0x11C56E8);
+extern "C" void __fastcall UpdateAnimatedLightsHook(TES* pTES)
 {
-	return CdeclCall<LightingData*>(0xAA13E0, /*size=*/592);
-}
-inline LightingData* InitLightingData(LightingData* ptr)
-{
-	return ThisCall<LightingData*>(0xB9FDA0, ptr);
-}
 
-//-----------------------------------------------------------------------------
-// Compile‑time checks for our offsets
-//-----------------------------------------------------------------------------
-static_assert(offsetof(NiDynamicEffect, resetTraits) == 0x9E, "resetTraits offset wrong");
-static_assert(offsetof(NiDynamicEffect, extraFlags) == 0x9F, "extraFlags offset wrong");
-static_assert(offsetof(NiPointLight, baseLight) == 0xE8, "baseLight offset wrong");
-static_assert(offsetof(NiPointLight, vector100) == 0x100, "vector100 offset wrong");
-static_assert(offsetof(TESObjectLIGH, lightFlags) == 0xA8, "lightFlags offset wrong");
+	clearClonedAnimations = 0;
 
-/*
-void __fastcall UpdateAnimatedLightsHook(TES* pTES)
-{
-	// Reset the per‑frame shadow counter
-	g_shadowSceneFrame = 0;
-
-	// Update interior vs exterior grid
-	TESObjectCELL* interior = pTES->currentInterior;
-	GridCellArray* grid = pTES->gridCellArray;
-
-	if (interior) {
-		grid = reinterpret_cast<GridCellArray*>(interior);
-		UpdateInteriorCells(grid);
+	if (pTES->currentInterior) {
+		pTES->currentInterior->updateCellRefsAnims();
 	}
 	else {
-		UpdateExteriorCells(grid);
+		pTES->gridCellArray->updateCellRefsAnims();
 	}
 
-	// Grab our active point‑lights (note the () on s_activePtLights)
-	auto& lights = s_activePtLights;       // Vector<NiPointLight*>&
-	uint32_t count = lights->Size();
-	if (count == 0)
-		return;
+	if (s_activePtLights->Empty()) return;
 
-	// Enter the scene‑lights CS
-	sceneLightsCS->Enter();
+	SceneLightsScope lockScope;
+	auto& lightsList = s_activePtLights();
 
-	// Walk backwards so removals don’t break the loop
-	NiPointLight** arr = lights->Data();
-	for (int32_t i = int32_t(count) - 1; i >= 0; --i) {
-		NiPointLight* light = arr[i];
+	// Reverse-index loop, shrink (Pop)
+	for (UInt32 i = lightsList.Size(); i-- > 0; )
+	{
+		NiPointLight* pl = lightsList[i];
+		if (!pl) continue;
 
-		// — free branch: only if orphaned *and* refCount == 0
-		if (light->m_parent == nullptr && light->m_uiRefCount == 0) {
-			light->Free();           // matches the 0xAA1460 call
-			lights->RemoveNth(i);
+		// Detached?
+		if (pl->m_parent == nullptr) {
+			if (pl->m_uiRefCount == 0) {
+				Ni_Free(pl, 1);
+				lightsList.RemoveUnorderedAt(i);
+			}
 			continue;
 		}
 
-		// — skip if already initialized this frame
-		//if (light->m_flags & NiAVObject::kNiFlag_DoneInitLights)
-			//continue;
+		// Skip if hidden
+		if ((pl->m_flags & NiAVObject::kNiFlag_Hidden) != 0)
+			continue;
 
-		// — resetTraits?
-		if (light->resetTraits) {
-			light->resetTraits = false;
-			light->SetLightProperties(light->baseLight);
+		TESObjectLIGH* base = pl->baseLight;
+		pl->updateTraits();
 
-			if (light->extraFlags & 1) {
-				light->extraFlags &= ~1;
-				light->m_transformLocal.translate = static_cast<NiVector3>(light->vector100);
-				light->m_transformLocal.scale = light->vector100.w;
-			}
+		// If refcount == 1 → allocate wrapper and attach (this matches the asm’s [pl+4]==1 path)
+		if (pl->m_uiRefCount == 1) {
+			LightingData* node = LightingData::CreatePointLight(pl, g_shadowSceneNode->portalGraph);
+			if (node) g_shadowSceneNode->queueLightData(node);
+			continue;
 		}
 
-		// — shadow‐generator branch for true point‑lights
-		if (light->effectType == NiDynamicEffect::kEffect_PointLight) {
-			LightingData* lightData = AllocateLightingData();
-			lightData = InitLightingData(lightData);
-
-			lightData->isShadowCasting = true;
-			lightData->light = light;
-			lightData->isPointLight = true;
-			lightData->isAmbientLight = false;
-			lightData->isDynamic = (light->baseLight->lightFlags & TESObjectLIGH::kFlag_Dynamic) != 0;
-			lightData->centrePos = light->WorldTranslate();
-			lightData->portalGraph = g_shadowSceneNode->portalGraph;
-
-			g_shadowSceneNode->sceneLights.Append(lightData);
+		// Otherwise, update only if base->lightFlags & 0x19C8 (offset 0xA8 in TESObjectLIGH)
+		if (base && (base->lightFlags.HasAnimation())) {
+			DoUpdateAnimatedLight(base, pl);
 		}
-		// — animated‑light branch (flicker/pulse/etc)
-		else if (auto* form = light->baseLight;
-			form && (form->lightFlags & 0x19C8) != 0)
-		{
-			DoUpdateAnimatedLight(form, light);
-		}
-
-		// mark done so we don’t re‑init until next tick
-		light->m_flags |= NiAVObject::kNiFlag_DoneInitLights;
 	}
 
-	// Leave the scene‑lights CS
-	sceneLightsCS->Leave();
 }
-*/
 
+/*
 __declspec(naked) void __fastcall UpdateAnimatedLightsHook(TES *pTES)
 {
 	__asm
@@ -4615,12 +4607,34 @@ __declspec(naked) void __fastcall UpdateAnimatedLightsHook(TES *pTES)
 		retn
 	}
 }
+*/
 
-TESObjectREFR *s_syncPositionRef = nullptr;
+extern _declspec(noinline) void __stdcall SetRefrPositionHook_CPP(TESObjectREFR* updatingRef, const NiVector3* pos);
+
+
+// ===== naked stub at 0x575A7F =====
+// responsible for updating positioning, and forces custom positioning.
+extern "C" __declspec(naked) void SetRefrPositionHook()
+{
+	__asm {
+		// this in [ebp-0x44], arPosition in [ebp+8] at this site
+		mov     ecx, [ebp - 0x44]      // this
+		mov     edx, [ebp + 8]         // pos
+
+		// stdcall: push right-to-left
+		push    edx                    // pos
+		push    ecx                    // updatingRef
+		call    SetRefrPositionHook_CPP // callee cleans 8 bytes
+
+		JMP_EAX(0x575B3C)
+	}
+}
+
+/*
+TESObjectREFR* s_syncPositionRef = nullptr;
 TempObject<NiFixedString> s_syncPositionNode;
 AlignedVector4 s_syncPositionMods(0, 0, 0, 0), s_syncPositionPos;
 UInt8 s_syncPositionFlags = 0;
-
 __declspec(naked) void SetRefrPositionHook()
 {
 	__asm
@@ -4683,6 +4697,7 @@ __declspec(naked) void SetRefrPositionHook()
 		JMP_EAX(0x575B3C)
 	}
 }
+*/
 
 TempObject<UnorderedMap<TESObjectREFR*, char*>> s_refrModelPathMap;
 

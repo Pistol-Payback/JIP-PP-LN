@@ -1,5 +1,7 @@
 ﻿#pragma once
 #include "p_plus/NiFixedString.hpp"
+#include "p_plus/pBitMask.hpp"
+#include "p_plus/pWeakPtr.hpp"
 #include <type_traits>
 #include <cstdint>
 #include <cstddef>
@@ -114,117 +116,324 @@ public:
 	/*00*/virtual void		Destructor(bool freeThis);
 	/*04*/virtual void		Free(void);
 
-	UInt32		m_uiRefCount;	// 04
+	volatile LONG m_uiRefCount;	// 04
 
 	bool IsType(UInt32 vtblPtr) const {
  		return *reinterpret_cast<void* const*>(this) == reinterpret_cast<void*>(vtblPtr);
 	}
 
 	// 0x40F6E0
-	void incrementRef() {
-		InterlockedIncrement(&m_uiRefCount);
-	}
+	void incrementRef() { InterlockedIncrement(&m_uiRefCount); }
 
 	// 0x401970
-	void decrementRef() {
-		if (!InterlockedDecrement(&m_uiRefCount)) {
-			Free();
-		}
-	}
+	void decrementRef() { if (!InterlockedDecrement(&m_uiRefCount)) Free(); }
 
 };
 
 // basic ref-count primitives
-inline void NiAddRef(NiRefObject* obj) noexcept {
-	if (obj) obj->incrementRef();
-}
-inline void NiRelease(NiRefObject* obj) noexcept {
-	if (obj) obj->decrementRef();
-}
+inline void NiAddRef(NiRefObject* obj) noexcept { if (obj) obj->incrementRef(); }
+inline void NiRelease(NiRefObject* obj) noexcept { if (obj) obj->decrementRef(); }
 
 struct adopt_ref_t { explicit adopt_ref_t() = default; };
 inline constexpr adopt_ref_t adopt_ref{};
 
-template<typename T>
+template<class...>
+inline constexpr bool ni_always_false = false;
+#include <memory>
+template<class T>
 class NiRefPtr {
-
 	static_assert(std::is_base_of_v<NiRefObject, T>, "NiRefPtr<T>: T must derive from NiRefObject");
 
 public:
 
-	T* ptr = nullptr;
+	using element_type = T;
 
-	// default/nullptr/raw‐pointer ctors
+	// ---- ctors ----
 	constexpr NiRefPtr() noexcept = default;
-	NiRefPtr(std::nullptr_t) noexcept : ptr(nullptr) {}
-	explicit NiRefPtr(T* p) noexcept : ptr(p) { NiAddRef(ptr); }
-	NiRefPtr(T* p, adopt_ref_t) noexcept : ptr(p) {}
+	constexpr NiRefPtr(std::nullptr_t) noexcept : ptr_(nullptr) {}
+	explicit NiRefPtr(T* ptr) noexcept : ptr_(ptr) { NiAddRef(ptr_); }
+	NiRefPtr(T* ptr, adopt_ref_t) noexcept : ptr_(ptr) {}
 
-	// converting-copy: U* → T*
-	template<typename U>
-		requires (std::convertible_to<U*, T*> || std::derived_from<T, U>)
-	NiRefPtr(const NiRefPtr<U>& other) noexcept
-		: ptr(static_cast<T*>(other.get()))
-	{
-		NiAddRef(ptr);
-	}
+	// Copy
+	NiRefPtr(const NiRefPtr& other) noexcept : ptr_(other.ptr_) { NiAddRef(ptr_); }
+	// Move (same type)
+	NiRefPtr(NiRefPtr&& other) noexcept : ptr_(other.ptr_) { other.ptr_ = nullptr; }
 
-	// converting-move: U* → T*, steal ownership
-	template<typename U>
-		requires (std::convertible_to<U*, T*> || std::derived_from<T, U>)
-	NiRefPtr(NiRefPtr<U>&& other) noexcept
-		: ptr(static_cast<T*>(other.get()))
-	{
-		other.ptr = nullptr;
-	}
+	// Converting copy (U* -> T* upcast only)
+	template<class U, class = std::enable_if_t<std::is_convertible_v<U*, T*>>>
+	NiRefPtr(const NiRefPtr<U>& other) noexcept : ptr_(static_cast<T*>(other.get())) { NiAddRef(ptr_); }
 
-	// copy
-	NiRefPtr(const NiRefPtr& o) noexcept : ptr(o.ptr) { NiAddRef(ptr); }
+	// Converting move (U* -> T* upcast only)
+	template<class U, class = std::enable_if_t<std::is_convertible_v<U*, T*>>>
+	NiRefPtr(NiRefPtr<U>&& other) noexcept : ptr_(static_cast<T*>(other.get())) { other.reset(); }
 
-	~NiRefPtr() noexcept { NiRelease(ptr); }
+	~NiRefPtr() noexcept { NiRelease(ptr_); }
 
-	// nullptr clears without release
-	NiRefPtr& operator=(std::nullptr_t) noexcept { ptr = nullptr; return *this; }
-	// raw pointer assign
-	NiRefPtr& operator=(T* p) noexcept {
-		if (p) NiAddRef(p);
-		if (ptr) NiRelease(ptr);
-		ptr = p;
+	// ---- assignments ----
+
+	NiRefPtr& operator=(std::nullptr_t) noexcept { reset(); return *this; }
+
+	// Raw pointer (AddRef). Self-assign fast path avoids needless atomics.
+	NiRefPtr& operator=(T* obj) noexcept {
+		if (obj == ptr_) return *this;
+		if (obj) NiAddRef(obj);
+		NiRelease(ptr_);
+		ptr_ = obj;
 		return *this;
 	}
-	// copy-assign
-	NiRefPtr& operator=(const NiRefPtr& o) noexcept { return *this = o.ptr; }
-	// move-assign
-	NiRefPtr& operator=(NiRefPtr&& o) noexcept {
-		if (this != &o) {
-			NiRelease(ptr);
-			ptr = o.ptr;
-			o.ptr = nullptr;
+
+	NiRefPtr& operator=(const NiRefPtr& other) noexcept {
+		if (this != std::addressof(other)) {
+			*this = other.ptr_;
 		}
 		return *this;
 	}
 
-	T* get() const noexcept { return ptr; }
-	T* operator->() const noexcept { return ptr; }
-	T& operator*() const noexcept { return *ptr; }
-	explicit operator bool() const noexcept { return ptr != nullptr; }
+	NiRefPtr& operator=(NiRefPtr&& other) noexcept {
+		if (this != std::addressof(other)) {
+			NiRelease(ptr_);
+			ptr_ = other.ptr_;
+			other.ptr_ = nullptr;
+		}
+		return *this;
+	}
 
-	bool operator==(std::nullptr_t) const noexcept { return ptr == nullptr; }
-	bool operator!=(std::nullptr_t) const noexcept { return ptr != nullptr; }
-	friend bool operator==(std::nullptr_t, const NiRefPtr& x) noexcept { return x.ptr == nullptr; }
-	friend bool operator!=(std::nullptr_t, const NiRefPtr& x) noexcept { return x.ptr != nullptr; }
+	template<class U, class = std::enable_if_t<std::is_convertible_v<U*, T*>>>
+	NiRefPtr& operator=(const NiRefPtr<U>& other) noexcept {
+		return (*this = static_cast<T*>(other.get()));
+	}
+
+	template<class U, class = std::enable_if_t<std::is_convertible_v<U*, T*>>>
+	NiRefPtr& operator=(NiRefPtr<U>&& other) noexcept {
+		reset();
+		ptr_ = static_cast<T*>(other.get());
+		other.reset();
+		return *this;
+	}
+
+	// ---- modifiers / helpers ----
+	void reset() noexcept {
+		NiRelease(ptr_);
+		ptr_ = nullptr;
+	}
+
+	void reset(T* p) noexcept { *this = p; }
+
+	// Adopt (no AddRef). Equivalent to operator=(p, adopt_ref) without ctor syntax.
+	void Attach(T* ptr) noexcept {
+		NiRelease(ptr_);
+		ptr_ = ptr;
+	}
+
+	// Release ownership without touching refcount; caller becomes responsible.
+	[[nodiscard]] T* Detach() noexcept {
+		T* ptr = ptr_;
+		ptr_ = nullptr;
+		return ptr;
+	}
+
+	void swap(NiRefPtr& other) noexcept {
+		std::swap(ptr_, other.ptr_);
+	}
+
+	// Intentionally delete address-of to catch accidental T** out-param misuse.
+	template<class _Enable = void>
+	T** operator&() noexcept {
+		static_assert(ni_always_false<T>,
+			"Do not take &NiRefPtr<T>. Use .Put() (callee AddRef) or .Receive() (transfer) "
+			"or .GetAddressOf() (read-only).");
+		return nullptr;
+	}
+
+	template<class _Enable = void>
+	T* const* operator&() const noexcept {
+		static_assert(ni_always_false<T>,
+			"Do not take &NiRefPtr<T> (const). Use .GetAddressOf() for read-only.");
+		return nullptr;
+	}
+
+	// Release current and return &ptr_.
+	T** Put() noexcept {
+		reset();
+		return &ptr_;
+	}
+
+	// transfer ownership without AddRef (rare; "adopt").
+	T** Receive() noexcept {
+		reset();
+		return &ptr_;
+	}
+
+	// Non-mutating address-of
+	T* const* GetAddressOf() const noexcept { return &ptr_; }
+
+	// ---- observers ----
+	T* get() const noexcept { return ptr_; }
+	T* operator->() const noexcept { return ptr_; }
+	T& operator* () const noexcept { return *ptr_; }
+	explicit operator bool() const noexcept { return ptr_ != nullptr; }
+
+	// Pointer comparisons
+	bool operator==(std::nullptr_t) const noexcept { return ptr_ == nullptr; }
+	bool operator!=(std::nullptr_t) const noexcept { return ptr_ != nullptr; }
+	friend bool operator==(const NiRefPtr& a, const NiRefPtr& b) noexcept { return a.ptr_ == b.ptr_; }
+	friend bool operator!=(const NiRefPtr& a, const NiRefPtr& b) noexcept { return a.ptr_ != b.ptr_; }
+
+	// debug only
+	long use_count_approx() const noexcept {
+		return ptr_ ? static_cast<long>(ptr_->m_uiRefCount) : 0;
+	}
+
+	// Upcast helper (keeps a shared reference; AddRef)
+	template<class U, class = std::enable_if_t<std::is_convertible_v<T*, U*>>>
+	NiRefPtr<U> As() const noexcept {
+		return NiRefPtr<U>(static_cast<U*>(ptr_));
+	}
+
+	template<class U>
+	NiRefPtr<U> UnsafeDowncast() const noexcept {
+		return NiRefPtr<U>(static_cast<U*>(ptr_));
+	}
+
+	template<class U>
+	NiRefPtr<U> UnsafeDowncastMove() noexcept {
+		U* raw = static_cast<U*>(ptr_);
+		ptr_ = nullptr;
+		return NiRefPtr<U>(raw, adopt_ref); // no AddRef on transfer
+	}
+
+private:
+	T* ptr_ = nullptr;
 };
 
-//–– free helpers ––
-template<typename T, typename U>
-NiRefPtr<T> ni_static_cast(const NiRefPtr<U>& src) noexcept {
-	return NiRefPtr<T>(static_cast<T*>(src.get()));
+template<class T> struct NiWeakPtr;
+
+template<class T>
+struct NiWeakRegistry : pWeakRegistry<T, NiWeakPtr<T>> {
+	static_assert(std::is_base_of_v<NiRefObject, T>, "NiWeakRegistry<T>: T must derive from NiRefObject");
+};
+
+// Global accessor specialized for Ni types
+template<class T>
+inline NiWeakRegistry<T>& GetNiWeakRegistry() {
+	static NiWeakRegistry<T> gRegistry;
+	return gRegistry;
 }
 
-template<typename T, typename U>
-NiRefPtr<T> ni_move_cast(NiRefPtr<U>&& src) noexcept {
-	return NiRefPtr<T>(std::move(src));
+// Convenience helpers for engine hooks
+template<class T>
+inline void NiWeakInvalidateAll(T* obj) {
+	GetNiWeakRegistry<T>().destroy_object(obj);
 }
+
+template<class T>
+inline void NiWeakRetargetAll(T* oldObj, T* newObj) {
+	GetNiWeakRegistry<T>().retarget_all(oldObj, newObj);
+}
+
+template<class T> struct NiWeakRegistry;
+template<class T> NiWeakRegistry<T>& GetNiWeakRegistry();
+
+template<class T>
+struct NiWeakPtr {
+
+	static_assert(std::is_base_of_v<NiRefObject, T>, "NiWeakPtr<T>: T must derive from NiRefObject");
+
+	using index_t = UInt16;
+	static constexpr index_t kInvalid = 0xFFFF;
+
+	T* ptr_ = nullptr;           // non-owning
+	index_t registryIndex = kInvalid; // bucket index in NiWeakRegistry<T>
+
+	constexpr NiWeakPtr() noexcept = default;
+	constexpr NiWeakPtr(std::nullptr_t) noexcept {}
+
+	NiWeakPtr(T* p) noexcept { rebind(p); }
+
+	// move-only
+	NiWeakPtr(NiWeakPtr&& other) noexcept : ptr_(other.ptr_), registryIndex(other.registryIndex) {
+		if (ptr_ && registryIndex != kInvalid)
+			GetNiWeakRegistry<T>().assignNewOwner(ptr_, registryIndex, this);
+		other.ptr_ = nullptr; other.registryIndex = kInvalid;
+	}
+	NiWeakPtr& operator=(NiWeakPtr&& other) noexcept {
+		if (this == &other) return *this;
+		deregister();
+		ptr_ = other.ptr_; registryIndex = other.registryIndex;
+		if (ptr_ && registryIndex != kInvalid)
+			GetNiWeakRegistry<T>().assignNewOwner(ptr_, registryIndex, this);
+		other.ptr_ = nullptr; other.registryIndex = kInvalid;
+		return *this;
+	}
+
+	// Assign from raw pointer
+	NiWeakPtr& operator=(T* p) noexcept { rebind(p); return *this; }
+
+	NiWeakPtr(const NiWeakPtr&) = delete;
+	NiWeakPtr& operator=(const NiWeakPtr&) = delete;
+
+	~NiWeakPtr() { deregister(); }
+
+	// registry-aware ops
+	void rebind(T* p) noexcept {
+		if (ptr_ == p) return;
+		if (ptr_ && registryIndex != kInvalid)
+			GetNiWeakRegistry<T>().remove(ptr_, registryIndex);
+		ptr_ = p;
+		registryIndex = ptr_ ? GetNiWeakRegistry<T>().add(ptr_, this) : kInvalid;
+	}
+
+	void update_target(T* newPtr) noexcept {
+		if (ptr_ == newPtr) return;
+		registryIndex = GetNiWeakRegistry<T>().change_target(this, newPtr, ptr_, registryIndex);
+		ptr_ = newPtr;
+	}
+
+	void on_owner_moved() noexcept {
+		if (ptr_ && registryIndex != kInvalid)
+			GetNiWeakRegistry<T>().assignNewOwner(ptr_, registryIndex, this);
+	}
+
+	void invalidate() noexcept { registryIndex = kInvalid; }
+	void deregister() noexcept {
+		if (ptr_ && registryIndex != kInvalid)
+			GetNiWeakRegistry<T>().remove(ptr_, registryIndex);
+		ptr_ = nullptr; registryIndex = kInvalid;
+	}
+	void reset() noexcept { deregister(); }
+
+	// queries
+	[[nodiscard]] constexpr bool is_alive()   const noexcept { return ptr_ && registryIndex != kInvalid; }
+	[[nodiscard]] constexpr bool hasIndex()   const noexcept { return registryIndex != kInvalid; }
+	[[nodiscard]] constexpr bool is_nullptr() const noexcept { return ptr_ == nullptr; }
+
+	// upgrade
+	[[nodiscard]] NiRefPtr<T> lock() const noexcept {
+		return is_alive() ? NiRefPtr<T>(ptr_) : NiRefPtr<T>{};
+	}
+
+	// observers
+	T* get() const noexcept { return ptr_; }
+	T* operator->() const noexcept {
+#if defined(_DEBUG) || defined(DEBUG)
+		assert(is_alive() && "NiWeakPtr::operator-> used while not alive");
+#endif
+		return ptr_;
+	}
+	T& operator*() const noexcept {
+#if defined(_DEBUG) || defined(DEBUG)
+		assert(is_alive() && "NiWeakPtr::operator* used while not alive");
+#endif
+		return *ptr_;
+	}
+	explicit constexpr operator bool() const noexcept { return is_alive(); }
+
+	// comparisons
+	friend constexpr bool operator==(const NiWeakPtr& a, const NiWeakPtr& b) noexcept { return a.ptr_ == b.ptr_; }
+	friend constexpr bool operator!=(const NiWeakPtr& a, const NiWeakPtr& b) noexcept { return !(a == b); }
+	constexpr bool operator==(std::nullptr_t) const noexcept { return !is_alive(); }
+	constexpr bool operator!=(std::nullptr_t) const noexcept { return  is_alive(); }
+};
 
 class TempNiRefObject
 {
@@ -264,6 +473,7 @@ struct NiUpdateData
 	UInt8		pad09[3];			// 09
 
 	NiUpdateData() {ZeroMemory(this, sizeof(NiUpdateData));}
+
 };
 
 extern const NiUpdateData kNiUpdateData;
@@ -1670,7 +1880,7 @@ public:
 	bhkNiCollisionObject	*m_collisionObject;		// 1C
 	NiBound					*m_kWorldBound;			// 20
 	DList<NiProperty>		m_propertyList;			// 24
-	UInt32					m_flags;				// 30
+	pBitMask<UInt32>		m_flags;				// 30
 	NiTransform				m_transformLocal;		// 34
 	NiTransform				m_transformWorld;		// 68
 
@@ -1739,9 +1949,12 @@ public:
 
 	static NiNode* __stdcall Create(const char *nameStr);		//	str of NiFixedString
 
+	static NiNode* __stdcall nCreate(const char* nameStr);
+	static NiNode* __stdcall nCreate(const NiFixedString& nameStr);
+
 	//New, use these instead
-	static NiNode* pCreate(const char* nameStr);
-	static NiNode* pCreate(const NiFixedString& nameStr);
+	static NiRefPtr<NiNode> pCreate(const char* nameStr);
+	static NiRefPtr<NiNode> pCreate(const NiFixedString& nameStr);
 
 	NiAVObject* __fastcall GetBlockByName(const char *nameStr) const;	//	str of NiFixedString
 	NiAVObject* __fastcall GetBlock(const char *blockName) const;
@@ -1767,7 +1980,7 @@ public:
 //------------------------------ Plugins+ ------------------------------
 
 	inline void attachRuntimeNode(NiAVObject* runtimeNode) {
-		runtimeNode->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
+		runtimeNode->m_flags.set(NiAVObject::NiFlags::kNiFlag_IsInserted);
 		this->AddObject(runtimeNode, true);
 	}
 
@@ -1815,6 +2028,60 @@ public:
 
 	}
 
+	inline NiRefPtr<NiAVObject> detachChild(NiAVObject* child) {
+
+		if (!child || child->m_parent != this) return {};
+		const int idx = findChildIndex(child);
+		if (idx < 0) return {};
+		m_children.RemoveAtSwapBack(idx);
+		child->m_parent = nullptr;
+		return NiRefPtr<NiAVObject>(child, adopt_ref);
+
+	}
+
+	inline int  findChildIndex(const NiAVObject* c) const {
+		for (UInt16 i = 0, n = m_children.Size(); i < n; ++i)
+			if (m_children.data[i] == c) return static_cast<int>(i);
+		return -1;
+	}
+
+	/*
+	bool attachChildNode(NiAVObject* child, NiNode** oldParent)
+	{
+		if (!this || !child) return false;
+		if (this == this)     return true;
+		if (child->m_parent != this) return false;
+
+		// Avoid duplicates on destination
+		if (!this->m_children.Contains(child)) {
+			if (!this->m_children.Append(&child)) return false; // grow/append via NiTArray, no atomics
+		}
+
+		// Remove from this (swap-with-back keeps the free block contiguous)
+		const int srcIdx = findChildIndex(child);
+		if (srcIdx < 0) {
+			// Roll back the append if we just inserted it
+			if (!this->m_children.Contains(child)) {
+				// not expected to hit, but safe-guard: remove last
+				this->m_children.RemoveAtSwapBack(this->m_children.Size() - 1);
+			}
+			return false;
+		}
+		m_children.RemoveAtSwapBack(srcIdx);
+
+		if (oldParent) {
+			*oldParent = child->m_parent;
+		}
+		else {
+			child->m_parent->decrementRef();
+		}
+
+		// Finalize logical link
+		child->m_parent = this;
+		return true;
+	}
+	*/
+
 	void AddPointLights();
 	NiAVObject* DeepSearchByName(const NiFixedString& nameStr);	//	str of NiString
 	NiAVObject* DeepSearchByName(const char* blockName);
@@ -1849,6 +2116,8 @@ public:
 		this->UpdateTransformAndBounds(kNiUpdateData);
 
 	}
+
+	inline bool hasChild(const NiAVObject* child) const { return m_children.Contains(const_cast<NiAVObject*>(child)); }
 
 	//Model Builder
 	bool hasChildNode(const char* name) const {
@@ -2383,11 +2652,20 @@ public:
 static_assert(sizeof(BSPortalGraph) == 0x78);
 
 class BSPortal;
+class NiPointLight;
 
 // 250
 class LightingData : public NiRefObject
 {
+
 public:
+
+	static inline LightingData* Create() {
+		return ThisCall<LightingData*>(0xB9FDA0, Ni_Alloc<LightingData>(1));
+	}
+
+	static LightingData* CreatePointLight(NiPointLight* pl, BSPortalGraph* portals);
+
 	UInt32								unk008;				// 008
 	float								luminance;			// 00C
 	float								matrix4x4[4][4];	// 010
@@ -2487,6 +2765,10 @@ public:
 	NiPoint3							cameraPos;			// 1F0
 	bool								allowLightRemoveQueues;	// 1FC
 	UInt8								pad1FD[3];			// 1FD
+
+	void queueLightData(LightingData* light) {
+		ThisCall(0xB5ECA0, this, light);
+	}
 };
 static_assert(sizeof(ShadowSceneNode) == 0x200);
 
@@ -2511,6 +2793,25 @@ static_assert(sizeof(NiCamera) == 0x114);
 
 extern NiCamera *g_mainCamera;
 
+struct JIPLightExtraFlags {
+
+	enum ExtraFlags {
+		kFlag_IsAnimated = BIT8(0), // set: restore local xform from vector100, then clear
+		kFlag_FromScript = BIT8(7), // set by script attach; cleared/removed on preload housekeeping
+	};
+
+	pBitMask<UInt8>	extraFlags;
+
+	bool isAnimated()   const { return extraFlags.hasAll(kFlag_IsAnimated); }
+	void setIsAnimated(bool on) { extraFlags.write(kFlag_IsAnimated, on); }
+
+	bool isFromScript()  const { return extraFlags.hasAll(kFlag_FromScript); }
+	void setFromScript(bool on) { extraFlags.write(kFlag_FromScript, on); }
+
+
+};
+static_assert(sizeof(JIPLightExtraFlags) == 1, "extraFlags must stay 1 byte");
+
 // C4
 class NiDynamicEffect : public NiAVObject
 {
@@ -2524,15 +2825,16 @@ public:
 		kEffect_TextureEffect =		5
 	};
 
-	bool			switchState;	// 9C
-	UInt8			effectType;		// 9D
-	bool			resetTraits;	// 9E	JIP only
-	UInt8			extraFlags;		// 9F	JIP only
-	SInt32			iIndex;			// A0
-	UInt32			pushCount;		// A4
-	UInt32			revID;			// A8
-	DList<NiNode>	shadowGenerator;// AC
-	DList<NiNode>	unaffectedNodes;// B8
+	bool				switchState;	// 9C
+	UInt8				effectType;		// 9D
+	bool				resetTraits;	// 9E	JIP only
+	JIPLightExtraFlags	extraFlags;		// 9F	JIP only
+	SInt32				iIndex;			// A0
+	UInt32				pushCount;		// A4
+	UInt32				revID;			// A8
+	DList<NiNode>		shadowGenerator;// AC
+	DList<NiNode>		unaffectedNodes;// B8
+
 };
 
 // F0
@@ -2558,8 +2860,34 @@ public:
 	NiVector4		vector100;		// 100
 
 	__forceinline static NiPointLight *Create() {return CdeclCall<NiPointLight*>(0xA7D6E0);}
+
+	inline static NiPointLight* Create(const NiFixedString& nameStr) {
+		NiPointLight* pointLight = CdeclCall<NiPointLight*>(0xA7D6E0);
+		if (nameStr) {
+			pointLight->m_blockName = NiFixedString(nameStr);
+		}
+		return pointLight;
+	}
+
 	void initLightBlock(NiNode* rootNode);
 	void SetLightProperties(TESObjectLIGH* lightForm);
+
+	void updateTraits() {
+		if (resetTraits) {
+			resetTraits = false;
+			SetLightProperties(baseLight);
+			if (extraFlags.isAnimated()) {
+				extraFlags.setIsAnimated(false);
+				m_transformLocal.translate = vector100;
+			}
+		}
+	}
+
+	inline void setAnimatedLightTranslation(NiVector3& newPos) {
+		if (extraFlags.isAnimated()) {
+			vector100 = newPos;
+		}
+	}
 
 };
 static_assert(sizeof(NiPointLight) == 0x110);

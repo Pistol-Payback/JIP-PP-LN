@@ -351,6 +351,7 @@ struct NVSEArrayVarInterface
 		Array *GetArray() {return dataType == kType_Array ? arr : NULL;}
 	};
 
+	//This doesn't make copies
 	struct ElementL : Element
 	{
 		ElementL() {dataType = kType_Invalid;}
@@ -379,6 +380,7 @@ struct NVSEArrayVarInterface
 		inline bool operator<(const Element &rhs) const {return raw < rhs.raw;}
 	};
 
+	//This holds string copies
 	struct ElementR : Element
 	{
 		ElementR() {dataType = kType_Invalid;}
@@ -808,8 +810,10 @@ struct ExpressionEvaluatorUtils
 	UInt32					(__fastcall *ScriptTokenGetAnimGroup)(const PluginScriptToken *scrToken);
 
 	void					(__fastcall *SetExpectedReturnType)(void *expEval, UInt8 retnType);
+
 	void					(__fastcall *AssignCommandResultFromElement)(void *expEval, NVSEArrayElement &result);
 	void					(__fastcall *ScriptTokenGetElement)(const PluginScriptToken *scrToken, ArrayElementR &outElem);
+
 	bool					(__fastcall *ScriptTokenCanConvertTo)(const PluginScriptToken *scrToken, UInt8 toType);
 
 	bool					(__fastcall *ExtractArgsVA)(void *expEval, va_list list);
@@ -954,7 +958,7 @@ struct PluginScriptToken
 		return s_expEvalUtils.ScriptTokenGetSlice(this);
 	}
 
-	void GetElement(ArrayElementR &outElem) const
+	void GetElementR(ArrayElementR &outElem) const
 	{
 		s_expEvalUtils.ScriptTokenGetElement(this, outElem);
 	}

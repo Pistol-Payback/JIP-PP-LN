@@ -257,7 +257,7 @@ struct NiRuntimeNodeVector {
             [&](NiRuntimeNode const& node) {
                 return !node.isValid();
             }
-        ); 
+        );
 
         return out;
     }
@@ -552,7 +552,7 @@ struct NiRuntimeNodeVector {
 
             // Splice all existing NiRuntimeNode paths
             updatePathsOnNodeInsert(fullPath, name);
-            NiNode* newParentNode = NiNode::pCreate(name);
+            NiNode* newParentNode = NiNode::nCreate(name);
 
             // Splice into the scene graph
             NiNode* grandparent = target->m_parent;
@@ -578,7 +578,7 @@ struct NiRuntimeNodeVector {
             if (!target || !target->isNiNode() || target->hasChildNode(name))
                 return false;
 
-            NiNode* newChildNode = NiNode::pCreate(name);
+            NiNode* newChildNode = NiNode::nCreate(name);
             if (!newChildNode) return false;
 
             target->attachRuntimeNode(newChildNode);
@@ -656,7 +656,7 @@ struct NiRuntimeNodeVector {
                     if (toRemove && toRemove->isNiNode()) {
                         subSearch = (NiNode*)toRemove; //Continue where search by path left off.
                     }
-   
+
                     NiBlockPathBuilder builderPath;
                     NiNode* node = (NiNode*)root->BuildNiPath(entry->sparsePath, builderPath); //Rebuild path
                     if (!node || !node->isNiNode()) {
@@ -678,14 +678,10 @@ struct NiRuntimeNodeVector {
     NiAVObject* findAndUpdateNode(NiRuntimeNode& runtimeNode, NiNode& root, bool& updated) {
 
         uint16_t resultDepth;
-        NiAVObject* found = root.DeepSearchByPath(NiBlockPathBase(runtimeNode.cachedPath, runtimeNode.node), resultDepth);
+        NiBlockPathBase fullPath = NiBlockPathBase(runtimeNode.cachedPath, runtimeNode.node);
+        NiAVObject* found = root.DeepSearchByPath(fullPath, resultDepth);
 
-        if (!found) {
-            Console_Print("findAndUpdateNode JIP Error, cachedPath is invalid");
-            return nullptr;
-        }
-
-        if (runtimeNode.node != found->m_blockName) { //Didn't find full path, lets rebuild the cache
+        if (!found || (runtimeNode.node != found->m_blockName) || resultDepth <= fullPath.size()) { //Didn't find full path, lets rebuild the cache
 
             NiNode* subSearch = &root;
             NiBlockPathBuilder builderPath;
@@ -711,6 +707,7 @@ struct NiRuntimeNodeVector {
                 if (!node || !node->isNiNode()) {
                     runtimeNode.cachedPath.clear(); //Bad runtime node, mark for delete
                     updated = true;
+                    Console_Print("JIP::findAndUpdateNode bad runtime node, cachedPath is invalid %s", runtimeNode.originToDebugString().c_str());
                     return nullptr;
                 }
 
@@ -752,7 +749,7 @@ struct NiRuntimeNodeVector {
                         insertedParent->replaceMe(originalChild); //Swaps insertedParent with originalChild
                     }
                     else {
-                        Console_Print("removeAllRuntimeNodes JIP Error, couldn't find a valid child to replace an inserted parent");
+                        Console_Print("JIP::removeAllRuntimeNodes error, couldn't find a valid child to replace an inserted parent: %s", entry->originToDebugString().c_str());
                         insertedParent->m_parent->RemoveObject(insertedParent);
                     }
 
@@ -834,10 +831,10 @@ struct NiRuntimeNodeVector {
 
             uint16_t resultDepth;
             node = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath, resultDepth);
-            if (!resultDepth) {
-                Console_Print("attachRuntimeModel JIP Error, cachedPath is invalid");
-                return false;
-            }
+            //if (!resultDepth) {
+                 //Console_Print("JIP::attachRuntimeModel error, cachedPath is invalid: %s", toAttach.originToDebugString().c_str());
+                 //return false;
+             //}
 
             if (resultDepth != toAttach.cachedPath.size()) { //Didin't find full path
 
@@ -897,10 +894,10 @@ struct NiRuntimeNodeVector {
 
             uint16_t resultDepth;
             node = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath, resultDepth);
-            if (!resultDepth) {
-                Console_Print("attachRuntimeNodeChild JIP Error, cachedPath is invalid");
-                return false;
-            }
+            //if (!resultDepth) {
+                //Console_Print("JIP::attachRuntimeNodeChild error, cachedPath is invalid: %s", toAttach.originToDebugString().c_str());
+                //return false;
+           // }
 
             if (resultDepth != toAttach.cachedPath.size()) { //Didin't find full path
 
@@ -921,11 +918,11 @@ struct NiRuntimeNodeVector {
             return true;
         }
 
-        NiNode* newNode = NiNode::pCreate(toAttach.node);
+        NiNode* newNode = NiNode::nCreate(toAttach.node);
         node->attachRuntimeNode(newNode);
         //node->UpdateTransformAndBounds(kNiUpdateData);
 
-        newNode->m_flags |= NiAVObject::NiFlags::kNiFlag_IsInserted;
+        newNode->m_flags.set(NiAVObject::NiFlags::kNiFlag_IsInserted);
 
         return true;
 
@@ -953,10 +950,10 @@ struct NiRuntimeNodeVector {
             uint16_t resultDepth;
             grandparent = (NiNode*)root.DeepSearchByPath(toAttach.cachedPath, resultDepth);
 
-            if (!resultDepth) {
-                Console_Print("attachRuntimeNodeChild JIP Error, cachedPath is invalid");
-                return false;
-            }
+            //if (!resultDepth) {
+                //Console_Print("JIP::attachRuntimeNodeParent error, cachedPath is invalid %s", toAttach.originToDebugString().c_str());
+                //return false;
+           // }
 
             if (resultDepth != toAttach.cachedPath.size()) { //Didin't find full path
 
@@ -987,7 +984,7 @@ struct NiRuntimeNodeVector {
             return true;
         }
 
-        NiNode* newParent = NiNode::pCreate(toAttach.node);
+        NiNode* newParent = NiNode::nCreate(toAttach.node);
         newParent->AddObject(child, true);
         grandparent->attachRuntimeNode(newParent);
 

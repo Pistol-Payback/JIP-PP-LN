@@ -770,6 +770,140 @@ public:
 	const T_Data* begin() const { return data; }
 	const T_Data* end()   const { return data + firstFreeEntry; }
 
+	// ---------- Introspection ----------
+	UInt16 Count()  const { return firstFreeEntry; }            // alias for Size()
+	UInt16 Capacity() const { return capacity; }
+	bool   IsEmpty() const { return firstFreeEntry == 0; }
+
+	// Heuristic: scan for any holes (cost O(n)). True ⇒ sparse.
+	bool IsSparse() const {
+		for (UInt16 i = 0; i < firstFreeEntry; ++i) {
+			if (is_empty(data[i])) return true;
+		}
+		return false;
+	}
+
+	// ---------- Safe access ----------
+	// Bounds-checked pointer; returns nullptr if out of range.
+	T_Data* TryGet(UInt32 idx) {
+		return (idx < firstFreeEntry) ? &data[idx] : nullptr;
+	}
+	const T_Data* TryGet(UInt32 idx) const {
+		return (idx < firstFreeEntry) ? &data[idx] : nullptr;
+	}
+
+	// ---------- Searching ----------
+	// Returns first index where pred(entry) is true, or -1.
+	template <class Pred>
+	int FindIndex(Pred&& pred) const {
+		for (UInt16 i = 0; i < firstFreeEntry; ++i) {
+			if (!is_empty(data[i]) && pred(data[i])) return static_cast<int>(i);
+		}
+		return -1;
+	}
+
+	// Equality-based search (if T_Data is comparable)
+	int IndexOf(const T_Data& value) const {
+		for (UInt16 i = 0; i < firstFreeEntry; ++i) {
+			if (!is_empty(data[i]) && data[i] == value) return static_cast<int>(i);
+		}
+		return -1;
+	}
+	bool Contains(const T_Data& value) const { return IndexOf(value) >= 0; }
+
+	// ---------- Iteration over valid (non-empty) slots ----------
+	// Foreach that skips empty entries.
+	template <class Fn>
+	void ForEachValid(Fn&& fn) {
+		for (UInt16 i = 0; i < firstFreeEntry; ++i)
+			if (!is_empty(data[i])) fn(data[i], i);
+	}
+	template <class Fn>
+	void ForEachValid(Fn&& fn) const {
+		for (UInt16 i = 0; i < firstFreeEntry; ++i)
+			if (!is_empty(data[i])) fn(data[i], i);
+	}
+
+	// ---------- Mutation ----------
+	// Convenience push that copies a value into the array using the engine Append().
+	// NOTE: Append expects a pointer to the *source value* to copy from.
+	int Push(const T_Data& value) { return Append(const_cast<T_Data*>(&value)); }
+
+	// Reserve using engine SetCapacity().
+	void Reserve(UInt16 newCapacity) { SetCapacity(newCapacity); }
+
+	// Remove by swapping with the last filled slot; preserves the "free block at end".
+	// Returns true if something was removed.
+	bool RemoveAtSwapBack(UInt32 index) {
+		if (index >= firstFreeEntry) return false;
+
+		// find last filled slot (firstFreeEntry - 1 or earlier if trailing holes exist)
+		// walk backward until a non-empty is found; if none, just mark empty & shrink.
+		SInt32 last = static_cast<SInt32>(firstFreeEntry) - 1;
+		while (last >= 0 && is_empty(data[last])) --last;
+		if (last < 0) { // everything was empty; just reset size
+			firstFreeEntry = 0;
+			return true;
+		}
+
+		if (index != static_cast<UInt32>(last)) {
+			data[index] = data[last];      // move last filled into the hole
+		}
+		set_empty(data[last]);             // clear old last
+		firstFreeEntry = static_cast<UInt16>(last); // shrink the filled range to keep free block contiguous
+		return true;
+	}
+
+	// Remove the first element that matches value (if comparable). Returns index removed or -1.
+	int RemoveOne(const T_Data& value) {
+		int i = IndexOf(value);
+		if (i >= 0 && RemoveAtSwapBack(static_cast<UInt32>(i))) return i;
+		return -1;
+	}
+
+	// Clear count but keep capacity; optionally zero the used range.
+	void ClearFast(bool zeroUsedRange = false) {
+		if (zeroUsedRange) {
+			for (UInt16 i = 0; i < firstFreeEntry; ++i) set_empty(data[i]);
+		}
+		firstFreeEntry = 0;
+	}
+
+	// Compact: stable move of all valid entries to the front; preserves order.
+	// This *does* walk the array and may be costlier than swap-back removal.
+	void CompactStable() {
+		UInt16 write = 0;
+		for (UInt16 read = 0; read < firstFreeEntry; ++read) {
+			if (!is_empty(data[read])) {
+				if (write != read) data[write] = data[read];
+				++write;
+			}
+		}
+		// clear the tail
+		for (UInt16 i = write; i < firstFreeEntry; ++i) set_empty(data[i]);
+		firstFreeEntry = write;
+	}
+
+private:
+	// --------- "empty slot" helpers ---------
+	static inline bool is_empty(const T_Data& v) {
+		if constexpr (std::is_pointer_v<T_Data>) {
+			return v == nullptr;
+		}
+		else {
+			// fallback: treat default-constructed value as empty
+			return v == T_Data{};
+		}
+	}
+	static inline void set_empty(T_Data& v) {
+		if constexpr (std::is_pointer_v<T_Data>) {
+			v = nullptr;
+		}
+		else {
+			v = T_Data{};
+		}
+	}
+
 };
 
 // 18

@@ -85,6 +85,7 @@ bool Cmd_GetMaxOf_Execute(COMMAND_ARGS)
 	return true;
 }
 
+//Update this with guard rails
 bool Cmd_ReadArrayFromFile_Execute(COMMAND_ARGS)
 {
 	char filePath[0x100];
@@ -207,6 +208,7 @@ void __fastcall WriteElemToFile(TempArrayElements *colElements, UInt32 idx, FILE
 	fputc('0', theFile);
 }
 
+//Update this with guard rails
 bool Cmd_WriteArrayToFile_Execute(COMMAND_ARGS)
 {
 	char filePath[0x100];
@@ -267,6 +269,7 @@ bool Cmd_WriteArrayToFile_Execute(COMMAND_ARGS)
 	return true;
 }
 
+//Update this with guard rails
 bool Cmd_ReadStringFromFile_Execute(COMMAND_ARGS)
 {
 	char *buffer = GetStrArgBuffer(), *startPtr = buffer;
@@ -300,6 +303,7 @@ bool Cmd_ReadStringFromFile_Execute(COMMAND_ARGS)
 	return true;
 }
 
+//Update this with guard rails
 bool Cmd_WriteStringToFile_Execute(COMMAND_ARGS)
 {
 	char *buffer = GetStrArgBuffer();

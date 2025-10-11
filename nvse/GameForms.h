@@ -2420,6 +2420,70 @@ public:
 // IngredientItem (A4)
 class IngredientItem;
 
+//From Plugins+
+struct LightFlags : public pBitMask<uint32_t> {
+
+	using Base = pBitMask<uint32_t>;
+	using Base::Base; using Base::set; using Base::remove; using Base::write;
+
+    // Bits
+    static constexpr uint32_t Dynamic        = BIT(0);
+    static constexpr uint32_t CanBeCarried   = BIT(1);
+    static constexpr uint32_t Negative       = BIT(2);
+    static constexpr uint32_t Flicker        = BIT(3);
+    static constexpr uint32_t Unused         = BIT(4);
+    static constexpr uint32_t OffByDefault   = BIT(5);
+    static constexpr uint32_t FlickerSlow    = BIT(6);
+    static constexpr uint32_t Pulse          = BIT(7);
+    static constexpr uint32_t PulseSlow      = BIT(8);
+    static constexpr uint32_t SpotLight      = BIT(9);
+    static constexpr uint32_t SpotShadow     = BIT(10);
+    // JIP-only:
+    static constexpr uint32_t ColorShift     = BIT(11);   // 0x0800
+    static constexpr uint32_t ColorShiftSlow = BIT(12);   // 0x1000
+
+	// Masks
+	static constexpr uint32_t AnimateMask = Flicker | FlickerSlow | Pulse | PulseSlow;
+
+	// ----- Queries -----
+	[[nodiscard]] constexpr bool IsDynamic()       const noexcept { return hasAll(Dynamic); }
+	[[nodiscard]] constexpr bool IsCarryable()     const noexcept { return hasAll(CanBeCarried); }
+	[[nodiscard]] constexpr bool IsNegative()      const noexcept { return hasAll(Negative); }
+	[[nodiscard]] constexpr bool IsOffByDefault()  const noexcept { return hasAll(OffByDefault); }
+	[[nodiscard]] constexpr bool IsSpot()          const noexcept { return hasAll(SpotLight); }
+	[[nodiscard]] constexpr bool HasSpotShadow()   const noexcept { return hasAll(SpotShadow); }
+
+	[[nodiscard]] constexpr bool IsFlicker()       const noexcept { return hasAll(Flicker); }
+	[[nodiscard]] constexpr bool IsFlickerSlow()   const noexcept { return hasAll(FlickerSlow); }
+	[[nodiscard]] constexpr bool IsPulse()         const noexcept { return hasAll(Pulse); }
+	[[nodiscard]] constexpr bool IsPulseSlow()     const noexcept { return hasAll(PulseSlow); }
+	[[nodiscard]] constexpr bool HasAnimation()    const noexcept { return (value & AnimateMask) != 0; }
+
+	// Typed animation selector (clears others first)
+	enum class Animate : uint8_t { None, Flicker, FlickerSlow, Pulse, PulseSlow };
+
+	// ----- Mutators -----
+	constexpr void SetDynamic(bool b)       noexcept { write(Dynamic, b); }
+	constexpr void SetCarryable(bool b)     noexcept { write(CanBeCarried, b); }
+	constexpr void SetNegative(bool b)      noexcept { write(Negative, b); }
+	constexpr void SetOffByDefault(bool b)  noexcept { write(OffByDefault, b); }
+	constexpr void SetSpot(bool b)          noexcept { write(SpotLight, b); }
+	constexpr void SetSpotShadow(bool b)    noexcept { write(SpotShadow, b); }
+
+	// Set exactly one of the animation modes
+	constexpr void SetAnimate(Animate a) noexcept {
+		remove(AnimateMask);
+		switch (a) {
+		case Animate::Flicker:     set(Flicker);     break;
+		case Animate::FlickerSlow: set(FlickerSlow); break;
+		case Animate::Pulse:       set(Pulse);       break;
+		case Animate::PulseSlow:   set(PulseSlow);   break;
+		case Animate::None: default: /* none */      break;
+		}
+	}
+
+};
+
 // TESObjectLIGH (C8)
 class TESObjectLIGH : public TESBoundAnimObject
 {
@@ -2457,7 +2521,7 @@ public:
 	UInt8						green;			// 0A5
 	UInt8						blue;			// 0A6
 	UInt8						padA7;			// 0A7
-	UInt32						lightFlags;		// 0A8
+	LightFlags					lightFlags;		// 0A8
 	float						falloffExp;		// 0AC
 	float						FOV;			// 0B0
 	float						fadeValue;		// 0B4
@@ -3460,11 +3524,11 @@ class TESRegionDataSound : public TESRegionData
 public:
 	/*28*/virtual BGSMusicType	*GetMusicType();
 	/*2C*/virtual void	SetMusicType(BGSMusicType *_musicType);
-	/*30*/virtual MediaSet	*GetIncidentalSet();
-	/*34*/virtual MediaSet	*GetBattleSet();
-	/*38*/virtual void	SetIncidentalSet(MediaSet *incidentalSet);
+	/*30*/virtual MediaSet* GetIncidentalSet();
+	/*34*/virtual MediaSet* GetBattleSet();
+	/*38*/virtual void	SetIncidentalSet(MediaSet* incidentalSet);
 
-	BGSMusicType	*musicType;			// 08
+	BGSMusicType* musicType;			// 08
 	SoundTypeList	soundTypes;			// 0C
 	UInt32			incidentalMediaSet;	// 14	RefID
 	tList<UInt32>	battleMediaSets;	// 18	RefIDs
@@ -3498,10 +3562,10 @@ typedef tList<RegionAreaEntry> RegionAreaEntryList;
 class TESRegion : public TESForm
 {
 public:
-	RegionDataEntryList	*dataEntries;	// 18
-	RegionAreaEntryList	*areaEntries;	// 1C
-	TESWorldSpace		*worldSpace;	// 20
-	TESWeather			*weather;		// 24
+	RegionDataEntryList* dataEntries;	// 18
+	RegionAreaEntryList* areaEntries;	// 1C
+	TESWorldSpace* worldSpace;	// 20
+	TESWeather* weather;		// 24
 	UInt32				unk28;			// 28
 	float				flt2C;			// 2C
 	float				flt30;			// 30
@@ -3522,7 +3586,7 @@ class TESObjectCELL : public TESForm
 {
 public:
 	typedef tList<TESObjectREFR> RefList;
-	
+
 	struct LightingData
 	{
 		ColorRGBA	ambient;			// 00
@@ -3535,7 +3599,7 @@ public:
 		float		directionalFade;	// 1C
 		float		fogClipDist;		// 20
 		float		fogPower;			// 24
-		void		*getValuesFrom;		// 28
+		void* getValuesFrom;		// 28
 	};
 
 	// 64
@@ -3551,8 +3615,11 @@ public:
 			kNodeIdx_OcclusionPlanes,
 			kNodeIdx_Portals,
 			kNodeIdx_Multibounds,
-			kNodeIdx_Collision
+			kNodeIdx_Collision,
+			kNodeIdx_Null,
 		};
+
+		static CellSubNodes formToSubNodes(TESObjectREFR* form);
 
 		NiNode										*masterNode;			// 00
 		tList<TESObjectREFR>						largeRefs;				// 04	refs with bound size > 3000
@@ -3643,6 +3710,11 @@ public:
 	{
 		refLock.Leave();
 	}
+
+	void updateCellRefsAnims() {
+		ThisCall(0x553820, this);
+	}
+
 };
 static_assert(sizeof(TESObjectCELL) == 0xE0);
 

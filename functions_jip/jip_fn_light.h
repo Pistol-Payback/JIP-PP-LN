@@ -119,8 +119,8 @@ bool Cmd_SetLightFlag_Execute(COMMAND_ARGS)
 	if (ExtractArgsEx(EXTRACT_ARGS_EX, &light, &flagID, &val) && IS_ID(light, TESObjectLIGH) && (flagID <= 31))
 	{
 		flagID = 1 << flagID;
-		if (val) light->lightFlags |= flagID;
-		else light->lightFlags &= ~flagID;
+		if (val) light->lightFlags.set(flagID);
+		else light->lightFlags.remove(flagID);
 		MarkLightModified(light);
 	}
 	return true;

@@ -173,7 +173,18 @@ public:
 
 	public:
 		explicit operator bool() const {return m_curr != NULL;}
-		void operator++() {m_curr = m_curr->next;}
+		Iterator& operator++() {
+			if (m_curr) m_curr = m_curr->next;
+			return *this;
+		}
+		Iterator operator++(int) {
+			Iterator tmp(*this);
+			++(*this);
+			return tmp;
+		}
+
+		bool operator==(const Iterator& rhs) const { return m_curr == rhs.m_curr; }
+		bool operator!=(const Iterator& rhs) const { return m_curr != rhs.m_curr; }
 
 		Item* Get() const {return m_curr->data;}
 		Item* operator->() const {return m_curr->data;}
@@ -189,6 +200,13 @@ public:
 	};
 	
 	const Iterator Begin() const {return Iterator(Head());}
+
+	Iterator begin() { return Iterator(Head()); }
+	Iterator end() { return Iterator(nullptr); }
+	Iterator begin() const { return Iterator(const_cast<Node*>(Head())); }
+	Iterator end()   const { return Iterator(nullptr); }
+	Iterator cbegin() const { return Iterator(const_cast<Node*>(Head())); }
+	Iterator cend()   const { return Iterator(nullptr); }
 
 	UInt32 Count() const
 	{

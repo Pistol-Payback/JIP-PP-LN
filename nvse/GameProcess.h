@@ -1465,7 +1465,7 @@ struct ProcessManager
 		{
 			if (Actor *actor = iter->data)
 				if (NiNode *rootNode = actor->GetRefNiNode())
-					rootNode->m_flags &= ~NiAVObject::kNiFlag_Culled;
+					rootNode->m_flags.remove(NiAVObject::kNiFlag_Culled);
 		}
 		while (iter = iter->next);
 	}

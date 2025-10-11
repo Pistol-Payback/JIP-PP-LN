@@ -627,6 +627,11 @@ public:
 
 	TESObjectCELL* __vectorcall GetCellAtPos(__m128 pos) const;
 	TESObjectCELL* __vectorcall GetCellAtCoord(__m128i cellXY) const;
+
+	void updateCellRefsAnims() {
+		ThisCall(0x4BABA0, this);
+	}
+
 };
 extern GridCellArray *g_gridCellArray;;
 
