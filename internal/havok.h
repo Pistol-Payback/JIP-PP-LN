@@ -1511,6 +1511,11 @@ public:
 	void					*bumpedCollObj;		// 638
 	hkArray<hkCdPoint>		arr63C;				// 63C
 	tList<void>				damageImpacts;		// 648
+
+	void updatePosition(NiVector3* newPos) {
+		ThisCall(0x5620E0, this, newPos);
+	}
+
 };
 static_assert(sizeof(bhkCharacterController) == 0x650);
 
