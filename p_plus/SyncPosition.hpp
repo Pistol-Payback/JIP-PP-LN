@@ -285,7 +285,7 @@ struct ChildBinding {
             NiNode* parentNode = parent->parentRef->GetRefNiNode();
             refresh3D(parentNode);
             refresh3D(childNode);
-            childRef->Update3D();
+            //childRef->Update3D();
         }
 
     }

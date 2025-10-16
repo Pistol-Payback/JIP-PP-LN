@@ -1448,6 +1448,10 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 	/*294F*/ REG_CMD_ARR(GetActiveEffectsInfo);
 	/*2950*/ REG_CMD(SetActiveEffectsInfo);
 
+	// v57.53 Hotfix
+	REG_CMD(UpdateNifBlock);
+	REG_CMD(UpdatePlayerScopeModel);
+
 	//===========================================================
 
 	if (nvse->isEditor)

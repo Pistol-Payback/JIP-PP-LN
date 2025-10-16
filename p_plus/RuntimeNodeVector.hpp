@@ -707,7 +707,7 @@ struct NiRuntimeNodeVector {
                 if (!node || !node->isNiNode()) {
                     runtimeNode.cachedPath.clear(); //Bad runtime node, mark for delete
                     updated = true;
-                    Console_Print("JIP::findAndUpdateNode bad runtime node, cachedPath is invalid %s", runtimeNode.originToDebugString().c_str());
+                    //Console_Print("JIP::findAndUpdateNode bad runtime node, cachedPath is invalid %s", runtimeNode.originToDebugString().c_str());
                     return nullptr;
                 }
 

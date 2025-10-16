@@ -145,7 +145,7 @@ public:
 	bool evalFormFilter(TESForm* parentEffect, TESForm* formFilter) {
 		if (formFilter == nullptr) return true;
 		if (formFilter->typeID == kFormType_EffectSetting) { //BaseEffect
-			this->getBaseMGEF() == formFilter;
+			return this->getBaseMGEF() == formFilter;
 		}
 		else {
 			return parentEffect == formFilter;

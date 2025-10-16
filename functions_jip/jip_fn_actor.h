@@ -1371,21 +1371,30 @@ __declspec(naked) void __fastcall ReloadBipedAnim(BipedAnim *bipAnim, NiNode *ro
 
 bool Cmd_ReloadEquippedModels_Execute(COMMAND_ARGS)
 {
-	if (g_OSGlobals->tfcState && g_OSGlobals->freezeTime)
+	if (g_OSGlobals->tfcState && g_OSGlobals->freezeTime) {
 		return true;
+	}
+
 	SInt32 targetSlot = -1;
 	Character *character = (Character*)thisObj;
-	if (!character->IsCharacter() || !character->GetRefNiNode() || !character->bipedAnims || !character->baseProcess || character->baseProcess->processLevel ||
-		(NUM_ARGS_EX && (!ExtractArgsEx(EXTRACT_ARGS_EX, &targetSlot) || (targetSlot > 19) || (targetSlot == 6))))
+	if (!character->IsCharacter() || !character->GetRefNiNode() || !character->bipedAnims || !character->baseProcess || character->baseProcess->processLevel || (NUM_ARGS_EX && (!ExtractArgsEx(EXTRACT_ARGS_EX, &targetSlot) || (targetSlot > 19) || (targetSlot == 6)))) {
 		return true;
+	}
+
 	TESObjectWEAP *weapon = ((targetSlot < 0) || (targetSlot == 5)) ? character->bipedAnims->slotData[5].weapon : nullptr;
+
 	bool doReEquip = weapon && (weapon->weaponFlags1 & 0x10);
-	if (doReEquip)
-		if (NiNode *backPack = character->bipedAnims->bip01->GetNode("Backpack"))
+	if (doReEquip) {
+		if (NiNode* backPack = character->bipedAnims->bip01->GetNode("Backpack")) {
 			backPack->m_parent->RemoveObject(backPack);
+		}
+	}
+
 	UInt32 reloadMask = 0xFFFBF;
-	if (targetSlot >= 0)
+	if (targetSlot >= 0) {
 		reloadMask &= (1 << targetSlot);
+	}
+
 	ReloadBipedAnim(character->bipedAnims, character->GetRefNiNode(), reloadMask);
 	if (character->IsPlayer())
 	{
@@ -1394,16 +1403,25 @@ bool Cmd_ReloadEquippedModels_Execute(COMMAND_ARGS)
 		if (weapon)
 		{
 			CdeclCall(0x77F270);
-			if (character->EquippedWeaponHasScope())
+			if (character->EquippedWeaponHasScope()) {
 				CdeclCall(0x77F2F0, &weapon->targetNIF);
+			}
 		}
 	}
+
+	/* This only triggers if we have a backpack weapon.
+	* generally scripters aren't expecting this function to trigger re-equip anyways. so this is intrusive, and should eventually be fazed out.*/
 	if (doReEquip)
 	{
 		HighProcess *hiProcess = (HighProcess*)character->baseProcess;
-		if (ContChangesEntry *weapInfo = hiProcess->weaponInfo; weapInfo && (weapInfo->type == weapon))
-			hiProcess->QueueEquipItem(character, 1, weapon, 1, weapInfo->extendData ? weapInfo->extendData->GetFirstItem() : nullptr, 1, 0, 1, 0, 0);
+		if (ContChangesEntry* weapInfo = hiProcess->weaponInfo; weapInfo && (weapInfo->type == weapon)) {
+			//hiProcess->QueueEquipItem(character, 1, weapon, 1, weapInfo->extendData ? weapInfo->extendData->GetFirstItem() : nullptr, 1, 0, 1, 0, 0); this was causing a crash
+			ExtraDataList* xData = weapInfo->extendData ? weapInfo->extendData->GetFirstItem() : nullptr;
+			character->EquipItem(weapon, 1, xData);
+		}
+
 	}
+
 	character->RefreshAnimData();
 	return true;
 }

@@ -458,6 +458,25 @@ namespace OBS_Details {
 
 }
 
+template <size_t N>
+struct RingIndex {
+
+	static_assert(N > 0);
+	uint32_t i = 0;
+
+	void advance() {
+		if constexpr ((N & (N - 1)) == 0) {
+			i = (i + 1) & (N - 1);
+		}
+		else {
+			++i;
+			if (i == N) i = 0;
+		}
+	}
+	size_t get() const { return i; }
+
+};
+
 bool Cmd_GetActiveEffectsInfo_Execute(COMMAND_ARGS)
 {
 	UInt8 tempEffects = 2;
@@ -471,7 +490,7 @@ bool Cmd_GetActiveEffectsInfo_Execute(COMMAND_ARGS)
 	if (eval.NumArgs() >= 1) {
 		if (eval.GetNthArg(0)->IsFormLike()) {
 			formFilter = eval.GetNthArg(0)->GetTESForm();
-			typeIDFilter = formFilter->typeID;
+			//typeIDFilter = formFilter->typeID;
 		}
 		else if (eval.GetNthArg(0)->IsNumericLike()) {
 			effectFilter = static_cast<OBS_Details::ActiveEffectFilter>(eval.GetNthArg(0)->GetUInt());
@@ -486,18 +505,34 @@ bool Cmd_GetActiveEffectsInfo_Execute(COMMAND_ARGS)
 	auto iter = ((Actor*)thisObj)->magicTarget.GetEffectList()->Head();
 	if (!iter) return true;
 	TempElements* tmpElements = GetTempElements();
+
+	constexpr size_t kRecentSize = 8;
+	std::array<ActiveEffect*, kRecentSize> recent{};
+	RingIndex<kRecentSize> ring; //Will roll over to index 0
+
 	do
 	{
-		if (ActiveEffect* activeEff = iter->data) {
+		ActiveEffect* activeEff = iter->data;
+		if (!activeEff) continue;
 
-			if (TESForm* effect = activeEff->getActiveEffect(typeIDFilter, tempEffects); effect && (!formFilter || formFilter == effect)) {
-				auto metaStruct = OBS_Details::makeScriptMetaStruct(activeEff, effect);
-				tmpElements->Append(CreateStringMap(OBS_Details::activeEffectMetaStructStrings, metaStruct.data(), 8, scriptObj));
-			}
+		//EffectList can have dupes?
+		const bool seen = std::find(recent.cbegin(), recent.cend(), activeEff) != recent.cend();
+		if (seen) {
+			//Console_Print("GetActiveEffectsInfo found a dupe");
+			continue;
+		}
+
+		if (TESForm* effect = activeEff->getActiveEffect(typeIDFilter, tempEffects, formFilter)) {
+
+			auto metaStruct = OBS_Details::makeScriptMetaStruct(activeEff, effect);
+			tmpElements->Append(CreateStringMap(OBS_Details::activeEffectMetaStructStrings, metaStruct.data(), 8, scriptObj));
+
+			recent[ring.get()] = activeEff;
+			ring.advance();
 
 		}
 
-	} while (iter = iter->next);
+	} while ((iter = iter->next));
 
 	if (!tmpElements->Empty()) {
 		*result = (int)CreateArray(tmpElements->Data(), tmpElements->Size(), scriptObj);

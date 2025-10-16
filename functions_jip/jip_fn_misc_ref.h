@@ -119,6 +119,9 @@ DEFINE_COMMAND_ALT_PLUGIN(ModSynchronizedPosition, ModSyncedPos, true, kParams_T
 DEFINE_COMMAND_ALT_PLUGIN(IsSynchronized, IsSynced, false, kParams_OneOptionalObjectRef);
 DEFINE_COMMAND_ALT_PLUGIN(GetSynchronizedChildren, GetSyncedChildren, true, nullptr);
 
+DEFINE_COMMAND_ALT_PLUGIN(UpdateNifBlock, ReloadNifBlock, true, kParams_OneString_TwoOptionalInts);
+DEFINE_COMMAND_ALT_PLUGIN(UpdatePlayerScopeModel, UpdatePCScope, false, nullptr);
+
 bool Cmd_SetPersistent_Execute(COMMAND_ARGS)
 {
 	UInt32 doSet;
@@ -1632,7 +1635,7 @@ bool __fastcall RegisterInsertObject_New(InsertObjectParams* inData) {
 bool Cmd_InsertNode_Execute(COMMAND_ARGS)
 {
 	InsertObjectParams* params = new InsertObjectParams;
-	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_AttachModel.numParams, &params->form, &params->mode))
+	if (ExtractFormatStringArgs(2, params->pathSpec, EXTRACT_ARGS_EX, kCommandInfo_InsertNode.numParams, &params->form, &params->mode))
 	{
 		params->hookFlag = InsertObjectParams::registerMode::kInsertNode;
 		params->modIndex = scriptObj->modIndex;
@@ -1687,6 +1690,54 @@ bool Cmd_AttachFormModel_Execute(COMMAND_ARGS)
 		else { MainLoopAddCallback(RegisterInsertObject_New, params); }
 	}
 	else { delete params; }
+
+	return true;
+}
+
+bool Cmd_UpdateNifBlock_Execute(COMMAND_ARGS)
+{
+	UInt32 updatePass = 0;
+	char blockName[0x40];
+	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
+	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &updatePass, &playerNode))
+	{
+		NiNode* rootNode = thisObj ? thisObj->GetNiNode() : nullptr;
+		NiBlockPathBase path(blockName);
+		if (rootNode) {
+
+			if (NiAVObject* block = rootNode->DeepSearchBySparsePath(path)) {
+				if (updatePass == 0) {
+					block->UpdateDownwardPass(kNiUpdateData, 0);
+				}
+				else if (updatePass == 1) {
+					block->UpdateTransformAndBounds(kNiUpdateData);
+				}
+				else if (updatePass == 2) {
+					block->UpdateControllers(kNiUpdateData);
+				}
+				return true;
+			}
+
+		}
+
+	}
+	return true;
+}
+
+bool Cmd_UpdatePlayerScopeModel_Execute(COMMAND_ARGS)
+{
+
+	auto* const player = g_thePlayer;
+	if (!player) return true;
+	if (!player->node1stPerson || !player->baseProcess) return true;
+
+	TESObjectWEAP* const weapon = player->GetEquippedWeapon();
+	if (!weapon) return true;
+
+	CdeclCall(0x77F270);
+	if (player->EquippedWeaponHasScope()) {
+		CdeclCall(0x77F2F0, &weapon->targetNIF);
+	}
 
 	return true;
 }

@@ -2388,6 +2388,37 @@ public:
 	RvIterator BeginRv() {return RvIterator(*this);}
 
 	CpIterator BeginCp() {return CpIterator(*this);}
+
+	using value_type = T_Data;
+	using size_type = UInt32;
+	using difference_type = std::ptrdiff_t;
+	using reference = T_Data&;
+	using const_reference = const T_Data&;
+	using pointer = T_Data*;
+	using const_pointer = const T_Data*;
+	using iterator = pointer;
+	using const_iterator = const_pointer;
+	using reverse_iterator = std::reverse_iterator<iterator>;
+	using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
+	[[nodiscard]] iterator begin() noexcept { return data; }
+	[[nodiscard]] iterator end()   noexcept { return data ? (data + numItems) : nullptr; }
+
+	[[nodiscard]] const_iterator begin() const noexcept { return data; }
+	[[nodiscard]] const_iterator end()   const noexcept { return data ? (data + numItems) : nullptr; }
+
+	[[nodiscard]] const_iterator cbegin() const noexcept { return begin(); }
+	[[nodiscard]] const_iterator cend()   const noexcept { return end(); }
+
+	// Optional: reverse iteration
+	[[nodiscard]] reverse_iterator rbegin() noexcept { return reverse_iterator(end()); }
+	[[nodiscard]] reverse_iterator rend()   noexcept { return reverse_iterator(begin()); }
+
+	[[nodiscard]] const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator(end()); }
+	[[nodiscard]] const_reverse_iterator rend()   const noexcept { return const_reverse_iterator(begin()); }
+
+	[[nodiscard]] const_reverse_iterator crbegin() const noexcept { return const_reverse_iterator(end()); }
+	[[nodiscard]] const_reverse_iterator crend()   const noexcept { return const_reverse_iterator(begin()); }
 };
 
 template <typename T_Data, const UInt32 size> class FixedTypeArray

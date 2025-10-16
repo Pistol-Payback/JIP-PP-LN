@@ -3138,6 +3138,7 @@ static NiPointLight* FindExistingPointLight(NiNode* parent)
 	return nullptr;
 }
 
+/*
 NiPointLight* __fastcall CreatePointLight(TESObjectLIGH* lightForm, NiNode* destParent)
 {
 	if (!destParent || !lightForm) return nullptr;
@@ -3168,8 +3169,8 @@ NiPointLight* __fastcall CreatePointLight(TESObjectLIGH* lightForm, NiNode* dest
 
 	return pointLight;
 }
+*/
 
-/*
 __declspec(naked) NiPointLight* __fastcall CreatePointLight(TESObjectLIGH *lightForm, NiNode *destParent)
 {
 	__asm
@@ -3232,7 +3233,6 @@ __declspec(naked) NiPointLight* __fastcall CreatePointLight(TESObjectLIGH *light
 		retn
 	}
 }
-*/
 
 void __fastcall AddPointLights(NiNode* objNode)
 {
