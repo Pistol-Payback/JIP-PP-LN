@@ -246,7 +246,7 @@ bool Cmd_GetCalculatedWeaponDegradation_Execute(COMMAND_ARGS)
 		return true;
 	}
 
-	if (!weap)
+	if (weap)
 	{
 		*result = weap->getCalculatedWeaponDegradation(ammo);
 	}
