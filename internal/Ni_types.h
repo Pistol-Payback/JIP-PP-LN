@@ -90,7 +90,17 @@ struct NiVector3
 	__forceinline __m128 operator*(__m128 packedPS) const {return PS() * packedPS;}
 
 	__forceinline NiVector3& operator+=(__m128 packedPS) {return SetPS(*this + packedPS);}
+	__forceinline NiVector3& operator+=(const NiVector3& o) noexcept {
+		SetPS(_mm_add_ps(PS(), o.PS()));
+		return *this;
+	}
+
 	__forceinline NiVector3& operator-=(__m128 packedPS) {return SetPS(*this - packedPS);}
+	__forceinline NiVector3& operator-=(const NiVector3& o) noexcept {
+		SetPS(_mm_sub_ps(PS(), o.PS()));
+		return *this;
+	}
+
 	__forceinline NiVector3& operator*=(float s) {return SetPS(*this * s);}
 	__forceinline NiVector3& operator*=(__m128 packedPS) {return SetPS(*this * packedPS);}
 

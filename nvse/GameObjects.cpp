@@ -1,4 +1,4 @@
-#include "nvse/GameObjects.h"
+﻿#include "nvse/GameObjects.h"
 #include "nvse/GameExtraData.h"
 #include "nvse/GameTasks.h"
 
@@ -2226,6 +2226,43 @@ double Actor::GetPathingDistance(TESObjectREFR *target)
 	PathingLocation from(this), to(target);
 	PathingRequest::ActorData actorData(this);
 	return CdeclCall<double>(0x6D4EB0, &from, &to, 0, &actorData, 0);
+}
+
+float Actor::getCalculateDegradation()
+{
+	const float* damageToWeaponSetting = reinterpret_cast<const float*>(0x11CF154);
+
+	BaseProcess* process = this->baseProcess;
+	if (!process || process->processLevel > 1) {
+		return *damageToWeaponSetting;
+	}
+
+	auto* hiProcess = static_cast<MiddleHighProcess*>(process);
+	ContChangesEntry* weaponInfo = hiProcess->weaponInfo;
+	if (!weaponInfo || !weaponInfo->weapon) {
+		return *damageToWeaponSetting;
+	}
+
+	float damageToWeapon = *damageToWeaponSetting;
+	TESObjectWEAP* weapon = weaponInfo->weapon;
+
+	if (!weapon->ammo.ammo)
+		return weapon->getCalculatedWeaponDegradation();
+
+	ContChangesEntry* ammoInfo = hiProcess->ammoInfo;
+	if (!ammoInfo || !ammoInfo->type)
+		return weapon->getCalculatedWeaponDegradation();
+
+	TESForm* ammoForm = ammoInfo->type;
+	if (ammoForm->typeID != kFormType_TESAmmo)
+		return weapon->getCalculatedWeaponDegradation();
+
+	TESAmmo* ammo = static_cast<TESAmmo*>(ammoForm);
+	if (!ammo->effectList.m_listHead.data)
+		return weapon->getCalculatedWeaponDegradation();
+
+	return weapon->getCalculatedWeaponDegradation(ammo);
+
 }
 
 void MagicTarget::RemoveEffect(EffectItem *effItem)

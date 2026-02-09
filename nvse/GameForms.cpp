@@ -1,5 +1,6 @@
 #include "nvse/GameForms.h"
 #include "internal/jip_core.h"
+#include <array>
 
 __declspec(naked) TESForm *TESForm::GetBaseIfRef() const
 {
@@ -1113,6 +1114,77 @@ __declspec(naked) TESAmmo *TESObjectWEAP::GetEquippedAmmo(Actor *actor) const
 		xor		eax, eax
 		retn	4
 	}
+}
+
+static constexpr std::array<float, kAVCode_Max> BuildFO3PercentDegradeLUT()
+{
+	std::array<float, kAVCode_Max> lut{};
+	// Fallout 3: condition loss = (base weapon damage) * (percent by skill)
+	lut[kAVCode_Guns] = 0.03f; // "Small Guns" in FO3
+	lut[kAVCode_EnergyWeapons] = 0.04f;
+	lut[kAVCode_MeleeWeapons] = 0.05f;
+	lut[kAVCode_Unarmed] = 0.05f;
+	lut[kAVCode_BigGuns] = 0.06f;
+	lut[kAVCode_Explosives] = 0.06f;
+
+	return lut;
+}
+
+static constexpr auto fallout3DegradeRules = BuildFO3PercentDegradeLUT();
+static constexpr bool bUsePerWeaponMultOverride = false;
+
+float TESObjectWEAP::getCalculatedWeaponDegradation(TESAmmo* ammo)
+{
+	const float* damageToWeaponSettingAddr = reinterpret_cast<const float*>(0x11CF154); // 0.20 by default
+	float damageToWeapon = *damageToWeaponSettingAddr;
+	float damageToWeaponSetting = *damageToWeaponSettingAddr;
+
+	if (this->weaponFlags2 & TESObjectWEAP::eFlag_DamageToWeaponOverride) {
+		damageToWeapon = this->damageToWeaponMult;
+	}
+
+	if (s_patchInstallState.FO3WpnDegrade) // Fallout 3 style conditioning
+	{
+		// Keep NV's global/override as a *scaler* relative to vanilla 0.20,
+		// so vanilla remains exact FO3 %, but overrides still influence it.
+		float scale = 1.0f;
+		if (bUsePerWeaponMultOverride) {
+			scale = (damageToWeaponSetting > 0.0f) ? (damageToWeapon / damageToWeaponSetting) : 1.0f;
+		}
+
+		const float baseDamage = this->attackDmg.damage;
+
+		// Default percent used if weaponSkill isn't mapped or LUT entry is 0
+		float percent = 0.02f;
+
+		const auto av_code = static_cast<ActorValueCode>(this->weaponSkill);
+		if (av_code >= 0 && av_code < kAVCode_Max)
+		{
+			const float lutPercent = fallout3DegradeRules[av_code];
+			if (lutPercent > 0.0f) {
+				percent = lutPercent;
+			}
+		}
+
+		float fo3Loss = 0.0f;
+		if (baseDamage > 0.0f) {
+			fo3Loss = baseDamage * percent * scale;
+		}
+		else {
+			fo3Loss = 0.01f;
+		}
+
+		damageToWeapon = fo3Loss;
+	}
+
+	if (ammo == nullptr) {
+		return damageToWeapon;
+	}
+
+	using AmmoDamageFn = float(__cdecl*)(UInt32, void*, float);
+	auto ammoDamage = reinterpret_cast<AmmoDamageFn>(0x59A030);
+	return ammoDamage(4, &ammo->effectList, damageToWeapon);
+
 }
 
 SInt32 BGSListForm::GetIndexOf(TESForm* pForm)

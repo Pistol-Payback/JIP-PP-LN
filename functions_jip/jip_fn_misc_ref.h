@@ -1068,40 +1068,77 @@ bool Cmd_GetNifBlockTranslation_Execute(COMMAND_ARGS)
 	return true;
 }
 
+
+struct eSetNifTranslation : public pBitMask<UInt32> {
+
+	enum {
+		kLocalPos,
+		kIncrementLocal,
+		kWorldPos,
+		kTranslateAlongLocalAxis
+	};
+
+	using pBitMask<UInt32>::pBitMask;
+
+};
+
+//Plugins+ setNifBlockTranslationAlt
 bool Cmd_SetNifBlockTranslation_Execute(COMMAND_ARGS)
 {
-	char blockName[0x40];
-	NiVector3 transltn;
-	GetRootNodeMask playerNode(PlayerCharacter::getCameraState());
-	UInt32 transform = 0;
-	if (ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &transltn.x, &transltn.y, &transltn.z, &playerNode, &transform) && blockName[0])
+	*result = 0;
+	char blockName[64];
+	float x = 0;
+	float y = 0;
+	float z = 0;
+	GetRootNodeMask playerNode{ GetRootNodeMask::kBoth };
+	eSetNifTranslation translationType{ eSetNifTranslation::kLocalPos };
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &blockName, &x, &y, &z, &playerNode, &translationType) && blockName[0]) {
+		return true;
+	}
 
-		if (NiAVObject* niBlock = thisObj->findNodeByName(playerNode, blockName))
-		{
-			if (!transform)
-				niBlock->LocalTranslate() = transltn;
-			else if (transform == 1)
-				niBlock->LocalTranslate() += transltn.PS();
-			else {
-				//From Plugins+
-				NiVector3 worldPt(transltn.x, transltn.y, transltn.z);
-				NiVector3 translated = worldPt - niBlock->m_parent->WorldTranslate();
-				__m128 invRotPS = niBlock->m_parent->WorldRotate().MultiplyVectorInv(translated.PS());
-				niBlock->LocalRotate() = NiVector3(invRotPS);
-			}
-			if IS_NODE(niBlock)
-			{
-				if NOT_ACTOR(thisObj)
-					((NiNode*)niBlock)->ResetCollision();
-			}
-			else if IS_TYPE(niBlock, NiPointLight) {
-				if (NiPointLight* ptLight = (NiPointLight*)niBlock) {
-					ptLight->setAnimatedLightTranslation(transltn);
-				}
-			}
+	if (!playerNode.hasAny(GetRootNodeMask::kFirstPerson, GetRootNodeMask::kThirdPerson))
+	{
+		playerNode.assign(GetRootNodeMask::kBoth);
+	}
 
-			niBlock->UpdateDownwardPass(kNiUpdateData, 0);
+	NiAVObject* block = thisObj->findNodeByName(playerNode, blockName);
+	if (!block) return true;
+
+	switch (translationType)
+	{
+	case eSetNifTranslation::kLocalPos: {
+		block->LocalTranslate() = NiVector3(x, y, z);
+		break;
+	}
+	case eSetNifTranslation::kWorldPos:
+	{
+		NiVector3 worldPt(x, y, z);
+		NiVector3 translated = worldPt - block->m_parent->WorldTranslate();
+		__m128 invRotPS = block->m_parent->WorldRotate().MultiplyVectorInv(translated.PS());
+		block->LocalTranslate() = NiVector3(invRotPS);
+
+		break;
+	}
+	case eSetNifTranslation::kIncrementLocal: {
+		block->LocalTranslate() += NiVector3(x, y, z);
+		break;
+	}
+	case eSetNifTranslation::kTranslateAlongLocalAxis: {
+		__m128 deltaPS = NiVector3(x, y, z).PS();
+		__m128 rotatedPS = block->WorldRotate().MultiplyVector(deltaPS);
+		block->LocalTranslate() += rotatedPS;
+		break;
+	}
+	}
+
+	if (block->isNiNode() && !thisObj->IsActor())
+	{
+		if (!thisObj->IsActor()) {
+			((NiNode*)block)->ResetCollision();
 		}
+		block->UpdateTransformAndBounds(kNiUpdateData);
+	}
+
 	return true;
 }
 
@@ -1601,7 +1638,7 @@ bool __fastcall RegisterInsertObject_New(InsertObjectParams* inData) {
 
 	// Use the reference itself as the form if present
 	TESForm* targetForm = refr ? refr : inData->form;
-	const char* path = inData->pathSpec;
+	char* path = inData->pathSpec;
 
 	switch (inData->hookFlag) {
 	case InsertObjectParams::registerMode::kInsertNode:
@@ -1804,7 +1841,7 @@ bool Cmd_SynchronizePositionAlt_Execute(COMMAND_ARGS)
 		const char* outPath = nullptr;
 		const char* outSuffix = nullptr;
 		const char* nop = nullptr; //NotUsed
-		FormRuntimeModelManager::formatString(formattedNode, outPath, nop, outSuffix);
+		pUtils::formatString(formattedNode, outPath, nop, outSuffix);
 		if (!outPath) {
 			outPath = nop;
 		}
@@ -1988,7 +2025,7 @@ bool Cmd_HasRuntimeNode_Execute(COMMAND_ARGS)
 	if (!eval.ExtractArgs()) return true;
 
     TESForm*			form = eval.GetNthArg(0)->GetTESForm();
-    const char*			path = eval.GetNthArg(1)->GetString();
+    char*				path = const_cast<char*>(eval.GetNthArg(1)->GetString()); //Is the char* in PluginExpressionEvaluator actually mutable?
     PluginScriptToken*	token = eval.GetNthArg(2);
 
 	if (!form || !path || !*path || !token || !form->IsBoundObject())

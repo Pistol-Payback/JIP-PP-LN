@@ -404,28 +404,28 @@ class TESObject : public TESForm
 public:
 	/*138*/virtual UInt32	Unk_4E(void);
 	/*13C*/virtual bool		Unk_4F(void);
-	/*140*/virtual UInt32	Unk_50(void);
-	/*144*/virtual bool		Unk_51(void);
-	/*148*/virtual void		Unk_52(void * arg);
-	/*14C*/virtual NiNode	*_CreateNiNode(TESObjectREFR *refr, bool arg1);
-	/*150*/virtual void		Unk_54(void * arg);
-	/*154*/virtual bool		IsInternal(void);
-	/*158*/virtual bool		IsInternalMarker(void);
+	/*140*/virtual UInt32	v_getWaterType(void);
+	/*144*/virtual bool		v_isAutoCalc(void);
+	/*148*/virtual void		v_setAutoCalc(void * arg);
+	/*14C*/virtual NiNode*	v_clone3D(TESObjectREFR *refr, bool deepCopy);
+	/*150*/virtual void		v_unClone3D(void * arg);
+	/*154*/virtual bool		v_isMarker(void);
+	/*158*/virtual bool		v_isOcclusionMarker(void);
 	/*15C*/virtual void		Unk_57(void);
-	/*160*/virtual bool		Unk_58(void);	// BoundObject: Calls Unk_5F on the object model
+	/*160*/virtual bool		v_reloadModel(void);	// BoundObject: Calls Unk_5F on the object model
 	/*164*/virtual bool		Unk_59(void * arg);
 	/*168*/virtual void		Unk_5A(void * arg0, void * arg1);
 	/*16C*/virtual UInt32	Unk_5B(void);
 	/*170*/virtual UInt32	Unk_5C(void);
-	/*174*/virtual NiNode	*CreateNiNode(TESObjectREFR *refr);
+	/*174*/virtual NiNode	*v_loadGraphics(TESObjectREFR *refr);
 };
 
 // 30
 class TESBoundObject : public TESObject
 {
 public:
-	/*178*/virtual NiNode	*Create3DModel(TESObjectREFR *refr);	// calls Fn53, for NPC calls ReadBones, for LevelledActor level them if necessary
-	/*17C*/virtual bool		Unk_5F(void);
+	/*178*/virtual NiNode*	v_CloneActor3D(TESObjectREFR *refr);	// calls Fn53, for NPC calls ReadBones, for LevelledActor level them if necessary
+	/*17C*/virtual bool		v_replaceModel(void);
 
 	BoundObjectListHead		*head;		// 018
 	TESBoundObject			*prev;		// 01C
@@ -2967,6 +2967,11 @@ public:
 	TESAmmo *GetEquippedAmmo(Actor *actor) const;
 	float GetModBonuses(UInt8 modFlags, UInt32 effectID) const;
 	TESModelTextureSwap *GetWeaponModel(UInt32 modFlags, Actor *actor) const;
+
+	//Plugins Plus..........................
+
+	float getCalculatedWeaponDegradation(TESAmmo* ammo = nullptr);
+
 };
 static_assert(sizeof(TESObjectWEAP) == 0x388);
 
@@ -5843,7 +5848,7 @@ public:
 		kAVFlag_Unused1 =				2,
 		kAVFlag_Unused2 =				4,
 		kAVFlag_Max10 =					8,
-		kAVFlag_Skill =					0x10,
+		kAVFlag_Max100 =				0x10,
 		kAVFlag_Condition =				0x20,
 		kAVFlag_Regenerates =			0x40,
 		kAVFlag_IgnoreDerivedValue =	0x80,
@@ -5852,7 +5857,7 @@ public:
 		kAVFlag_CreatureCombatSkill =	0x400,
 		kAVFlag_UnkB =					0x800,
 		kAVFlag_UnkC =					0x1000,
-		kAVFlag_UnusedD =				0x2000,
+		kAVFlag_Unplayable =			0x2000,
 		kAVFlag_NonModifiableByScript =	0x4000,
 		kAVFlag_Min1 =					0x8000
 	};

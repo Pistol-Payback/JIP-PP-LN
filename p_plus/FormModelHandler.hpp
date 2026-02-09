@@ -2,12 +2,184 @@
 #include "RuntimeNodeVector.hpp"
 #include "NiBlockPath.hpp"
 #include "NiBlockPathBuilder.hpp"
+#include "pStringUtilities.hpp"
 #include <unordered_map>
 
 enum AttachHookFlags : uint8_t
 {
     kAttachHookFlags_InsertNode = 64,       //kAttachHookFlags_InsertNode
     kAttachHookFlags_AttachModel = 128,     //kAttachHookFlags_AttachModel
+};
+
+
+class BaseRuntimeModelManager {
+
+    std::unordered_map<const char*, NiRuntimeNodeVector> modelBuilder = {};
+
+    BaseRuntimeModelManager() = default;
+    ~BaseRuntimeModelManager() = default;
+
+    static BaseRuntimeModelManager s_nodeManager;
+
+    NiRuntimeNodeVector* getNodesList(const char* modelPath) {
+        const auto iter = modelBuilder.find(modelPath);
+        NiRuntimeNodeVector* pathList = nullptr;
+        if (iter != modelBuilder.end()) {
+            pathList = &iter->second;
+        }
+        return pathList;
+    };
+    const NiRuntimeNodeVector* getNodesList(const char* modelPath) const {
+        const auto iter = modelBuilder.find(modelPath);
+        const NiRuntimeNodeVector* pathList = nullptr;
+        if (iter != modelBuilder.end()) {
+            pathList = &iter->second;
+        }
+        return pathList;
+    };
+
+    /// Register a new node‐path for `form`.
+    /// If this is the first path for the form, set its JIP flag on.
+    bool RegisterNode(UInt32 modIndex, const char* modelPath, const char* formattedNode) {
+
+        NiRuntimeNodeVector* runtimeList = getNodesList(modelPath);
+
+        const char* outPath = nullptr;
+        const char* outNodeName = nullptr;
+        const char* outSuffix = nullptr;
+        pUtils::formatString(const_cast<char*>(formattedNode), outPath, outNodeName, outSuffix);
+
+        NiBlockPathBase blockPath(outPath);
+
+        // skip a leading '^' if present
+        const char* name = outNodeName + (outNodeName[0] == '^');
+        if (runtimeList) {
+            if (runtimeList->lookupNode(blockPath, name)) {
+                return false;  // Already attached
+            }
+        }
+        Model* model;
+        if (!g_modelLoader->loadModel(modelPath, model)) {
+            return false; //Model failed to load
+        }
+
+        if (!runtimeList) {
+            // first-ever node for this form
+            NiRuntimeNodeVector modelRuntimeNodes;
+            if (!modelRuntimeNodes.attachNode(modIndex, model->niNode, blockPath, outNodeName, true)) {
+                return false;
+            }
+            auto result = modelBuilder.try_emplace(modelPath, std::move(modelRuntimeNodes));
+            return result.second;
+        }
+        else if (!runtimeList->attachNode(modIndex, model->niNode, blockPath, outNodeName, true)) {
+            return false;
+        }
+
+        return true;
+
+    }
+
+    bool RegisterModel(UInt32 modIndex, const char* modelPath, char* formattedNode) {
+
+        NiRuntimeNodeVector* runtimeList = getNodesList(modelPath);
+
+        const char* outPath = nullptr;
+        const char* toAttachModelPath = nullptr;
+        const char* outSuffix = nullptr;
+        pUtils::formatString(formattedNode, outPath, toAttachModelPath, outSuffix);
+
+        if (!modelPath || !modelPathExists(toAttachModelPath) || !modelPathExists(modelPath)) {
+            return false;
+        }
+
+        NiBlockPathBase blockPath(outPath);
+        ModelPath attachModel(modelPath, outSuffix);
+
+        // Already attached?  Nothing to do.
+        if (runtimeList && runtimeList->lookupModel(blockPath, attachModel)) {
+            return false;
+        }
+
+        Model* model;
+        if (!g_modelLoader->loadModel(modelPath, model)) {
+            return false; //Model failed to load
+        }
+
+        if (!runtimeList) {
+
+            NiRuntimeNodeVector modelRuntimeNodes;
+            if (!modelRuntimeNodes.attachModel(modIndex, model->niNode, blockPath, attachModel, true)) {
+                return false;
+            }
+            auto result = modelBuilder.try_emplace(modelPath, std::move(modelRuntimeNodes));
+            return result.second;
+        }
+        else {
+
+            if (!runtimeList->attachModel(modIndex, model->niNode, blockPath, attachModel, true)) {
+                return false;
+            }
+
+        }
+
+        return true;
+
+    }
+
+    bool RegisterRefModel(UInt32 modIndex, const char* modelPath, TESForm* toAttach, char* formattedNode) {
+
+        if (!toAttach) return false;
+        NiRuntimeNodeVector* runtimeList = getNodesList(modelPath);
+
+        const char* outPath = nullptr;
+        const char* outSuffix = nullptr;
+        const char* nop = nullptr; //NotUsed
+        pUtils::formatString(formattedNode, outPath, nop, outSuffix);
+        if (!outPath) {
+            outPath = nop;
+        }
+
+        RefModel refModel(toAttach->refID, outSuffix);
+        NiBlockPathBase blockPath(outPath);
+
+        // Already attached?  Nothing to do.
+        if (runtimeList && runtimeList->lookupRefModel(blockPath, refModel)) {
+            return false;
+        }
+
+        ModelTemp formModel = refModel.getRuntimeModel(toAttach);
+        if (!formModel.isValid()) {
+            return false;
+        }
+
+        Model* model;
+        if (!g_modelLoader->loadModel(modelPath, model)) {
+            return false; //Model failed to load
+        }
+
+        if (!runtimeList) {
+
+            NiRuntimeNodeVector modelRuntimeNodes;
+            if (!modelRuntimeNodes.attachRefModel(modIndex, model->niNode, blockPath, refModel, formModel, true)) {
+                return false;
+            }
+            auto result = modelBuilder.try_emplace(modelPath, std::move(modelRuntimeNodes));
+            return result.second;
+
+        }
+        else {
+
+            if (!runtimeList->attachRefModel(modIndex, model->niNode, blockPath, refModel, formModel, true)) {
+                return false;
+            }
+
+        }
+
+        return true;
+
+    }
+
 };
 
 //----------------------------------------------------------------------
@@ -34,73 +206,6 @@ public:
 
     static FormRuntimeModelManager& getSingleton() {
         return s_nodeManager;
-    }
-
-    static bool formatString(const char* toFormat, const char*& outPath, const char*& outValue, const char*& outSuffix)
-    {
-
-        outPath = nullptr;
-        outValue = nullptr;
-        outSuffix = nullptr;
-
-        if (!toFormat || !*toFormat)
-            return false;
-
-        // Try to find the pipe first
-        char* pipe = FindChr(toFormat, '|');
-        char* rem = nullptr;
-
-        if (pipe) {
-            // Split at pipe
-            *pipe = '\0';
-            outPath = toFormat;
-            rem = pipe + 1;
-            if (!*rem)
-                return false;  // nothing after pipe
-        }
-        else {
-            // No pipe: whole string is in rem
-            rem = const_cast<char*>(toFormat);
-        }
-
-        // Now look for optional *suffix* at start of rem
-        if (rem[0] == '*') {
-            char* second = FindChr(rem + 1, '*');
-            if (second && second > rem + 1) {
-                *second = '\0';
-                outSuffix = rem + 1;
-                rem = second + 1;
-            }
-        }
-
-        if (!*rem)
-            return false;  // no actual value
-
-        outValue = rem;
-        return true;
-    }
-
-
-    static inline bool splitPathHead(const char* fullPath, char* buffer, size_t bufSize, const char*& outPrefix, const char*& outLeaf) noexcept {
-
-        size_t len = strnlen(fullPath, bufSize);
-        if (len == bufSize) return false;              // too long
-
-        // copy + null
-        std::memcpy(buffer, fullPath, len + 1);
-
-        // find last backslash
-        char* slash = std::strrchr(buffer, '\\');
-        if (slash) {
-            *slash = '\0';                             // terminate prefix
-            outPrefix = buffer;
-            outLeaf = slash + 1;
-        }
-        else {
-            outPrefix = "";                             // empty prefix
-            outLeaf = buffer;                         // whole thing is the leaf
-        }
-        return true;
     }
 
     bool CopyRuntimeNodes(TESForm* copyTo, TESForm* copyFrom) noexcept {
@@ -242,7 +347,7 @@ public:
         return false;
     }
 
-    bool hasRuntimeNodeNiNode(TESForm* form, const char* formattedNode) {
+    bool hasRuntimeNodeNiNode(TESForm* form, char* formattedNode) {
 
         if (!form) return false;
         NiRuntimeNodeVector* runtimeList = getNodesList(form);
@@ -250,7 +355,7 @@ public:
         const char* outPath = nullptr;
         const char* outNodeName = nullptr;
         const char* outSuffix = nullptr;
-        formatString(formattedNode, outPath, outNodeName, outSuffix);
+        pUtils::formatString(formattedNode, outPath, outNodeName, outSuffix);
 
         NiBlockPathBase blockPath(outPath);
 
@@ -269,7 +374,7 @@ public:
         return false;
     }
 
-    bool hasRuntimeNodeModel(TESForm* form, const char* formattedNode) {
+    bool hasRuntimeNodeModel(TESForm* form, char* formattedNode) {
 
         if (!form) return false;
         NiRuntimeNodeVector* runtimeList = getNodesList(form);
@@ -277,7 +382,7 @@ public:
         const char* outPath = nullptr;
         const char* modelPath = nullptr;
         const char* outSuffix = nullptr;
-        formatString(formattedNode, outPath, modelPath, outSuffix);
+        pUtils::formatString(formattedNode, outPath, modelPath, outSuffix);
 
         NiBlockPathBase blockPath(outPath);
         ModelPath model(modelPath, outSuffix);
@@ -294,7 +399,7 @@ public:
         return false;
     }
 
-    bool hasRuntimeNodeRefModel(TESForm* form, TESForm* toAttach, const char* formattedNode) {
+    bool hasRuntimeNodeRefModel(TESForm* form, TESForm* toAttach, char* formattedNode) {
 
         if (!form || !toAttach) return false;
         NiRuntimeNodeVector* runtimeList = getNodesList(form);
@@ -302,7 +407,7 @@ public:
         const char* outPath = nullptr;
         const char* outSuffix = nullptr;
         const char* nop = nullptr; //NotUsed
-        formatString(formattedNode, outPath, nop, outSuffix);
+        pUtils::formatString(formattedNode, outPath, nop, outSuffix);
 
         RefModel model(toAttach->refID, outSuffix);
         NiBlockPathBase blockPath(outPath);
@@ -321,7 +426,7 @@ public:
 
     /// Register a new node‐path for `form`.
     /// If this is the first path for the form, set its JIP flag on.
-    bool RegisterNode(UInt32 modIndex, TESForm* form, const char* formattedNode, NiNode* root, bool insertIntoMap) {
+    bool RegisterNode(UInt32 modIndex, TESForm* form, char* formattedNode, NiNode* root, bool insertIntoMap) {
 
         bool successful = false;
 
@@ -331,7 +436,7 @@ public:
         const char* outPath = nullptr;
         const char* outNodeName = nullptr;
         const char* outSuffix = nullptr;
-        formatString(formattedNode, outPath, outNodeName, outSuffix);
+        pUtils::formatString(formattedNode, outPath, outNodeName, outSuffix);
 
         NiBlockPathBase blockPath(outPath);
 
@@ -377,7 +482,7 @@ public:
 
     }
 
-    bool RegisterModel(UInt32 modIndex, TESForm* form, const char* formattedNode, NiNode* root, bool insertIntoMap) {
+    bool RegisterModel(UInt32 modIndex, TESForm* form, char* formattedNode, NiNode* root, bool insertIntoMap) {
 
         if (!form) return false;
         NiRuntimeNodeVector* runtimeList = getNodesList(form);
@@ -385,7 +490,7 @@ public:
         const char* outPath = nullptr;
         const char* modelPath = nullptr;
         const char* outSuffix = nullptr;
-        formatString(formattedNode, outPath, modelPath, outSuffix);
+        pUtils::formatString(formattedNode, outPath, modelPath, outSuffix);
 
         if (!modelPath || !modelPathExists(modelPath)) {
             return false;
@@ -433,7 +538,7 @@ public:
 
     }
 
-    bool RegisterRefModel(UInt32 modIndex, TESForm* form, TESForm* toAttach, const char* formattedNode, NiNode* root, bool insertIntoMap) {
+    bool RegisterRefModel(UInt32 modIndex, TESForm* form, TESForm* toAttach, char* formattedNode, NiNode* root, bool insertIntoMap) {
 
         if (!form) return false;
         if (!toAttach) return false;
@@ -442,7 +547,7 @@ public:
         const char* outPath = nullptr;
         const char* outSuffix = nullptr;
         const char* nop = nullptr; //NotUsed
-        formatString(formattedNode, outPath, nop, outSuffix);
+        pUtils::formatString(formattedNode, outPath, nop, outSuffix);
         if (!outPath) {
             outPath = nop;
         }
@@ -496,7 +601,7 @@ public:
 
     /// Remove one matching node‐path for `form`.
     /// If that was the last entry, clear its JIP flag.
-    bool RemoveNode(TESForm* form, const char* formattedNode, NiNode* root) {
+    bool RemoveNode(TESForm* form, char* formattedNode, NiNode* root) {
 
         if (!form) return false;
         NiRuntimeNodeVector* runtimeList = getNodesList(form);
@@ -506,7 +611,7 @@ public:
         const char* outPath = nullptr; //If they put a pipe
         const char* nodeName = nullptr; //Node name or model path
         const char* outSuffix = nullptr;
-        formatString(formattedNode, outPath, nodeName, outSuffix);
+        pUtils::formatString(formattedNode, outPath, nodeName, outSuffix);
 
         NiBlockPathBase lookupPath(outPath);
         NiFixedString lookupName(nodeName);
@@ -536,7 +641,7 @@ public:
         return true;
     }
 
-    bool RemoveModel(TESForm* form, const char* formattedNode, NiNode* root) {
+    bool RemoveModel(TESForm* form, char* formattedNode, NiNode* root) {
 
         if (!form) return false;
         NiRuntimeNodeVector* runtimeList = getNodesList(form);
@@ -546,7 +651,7 @@ public:
         const char* attachToNode = nullptr;
         const char* modelPath = nullptr; //Node name or model path
         const char* outSuffix = nullptr;
-        formatString(formattedNode, attachToNode, modelPath, outSuffix);
+        pUtils::formatString(formattedNode, attachToNode, modelPath, outSuffix);
 
         if (!modelPath || !modelPathExists(modelPath)) {
             return false;
@@ -579,7 +684,7 @@ public:
         return true;
     }
 
-    bool RemoveRefModel(TESForm* form, TESForm* toRemove, const char* formattedNode, NiNode* root) {
+    bool RemoveRefModel(TESForm* form, TESForm* toRemove, char* formattedNode, NiNode* root) {
 
         if (!form) return false;
         if (!toRemove) return false;
@@ -590,7 +695,7 @@ public:
         const char* outPath = nullptr;
         const char* outSuffix = nullptr;
         const char* nop = nullptr; //NotUsed
-        formatString(formattedNode, outPath, nop, outSuffix);
+        pUtils::formatString(formattedNode, outPath, nop, outSuffix);
         if (!outPath) {
             outPath = nop;
         }

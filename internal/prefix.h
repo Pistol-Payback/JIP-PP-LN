@@ -479,3 +479,5 @@ struct hkMatrix3x4;
 #include "nvse/GameOSDepend.h"
 #include "nvse/GameTiles.h"
 #include "nvse/GameUI.h"
+
+#include "p_plus/pStringUtilities.hpp"

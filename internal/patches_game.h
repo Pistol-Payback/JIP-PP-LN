@@ -2713,6 +2713,7 @@ __declspec(naked) void __fastcall MarkRefAsModifiedHook(TESObjectREFR *refr, int
 
 PatchInstallState s_patchInstallState;
 
+#if 0  // JIPLN_LEGACY_BEGIN: GetDamageToWeaponHook asm
 __declspec(naked) float __cdecl GetDamageToWeaponHook(Actor *actor)
 {
 	__asm
@@ -2767,7 +2768,7 @@ __declspec(naked) float __cdecl GetDamageToWeaponHook(Actor *actor)
 		jz		noAmmo
 		push	ecx
 		push	4
-		CALL_EAX(ADDR_ApplyAmmoEffects)
+		__asm mov eax, 0x59A030 __asm call eax
 		add		esp, 0xC
 		retn
 	noAmmo:
@@ -2784,6 +2785,33 @@ __declspec(naked) float __cdecl GetDamageToWeaponHook(Actor *actor)
 	kDegrMults:
 		EMIT_DW_4(0x3E19999A, 0x3E4CCCCD, 0x3E800000, 0x3E99999A)
 	}
+}
+#endif // JIPLN_LEGACY_END
+
+namespace refactored
+{
+	// ECX = Actor*, EDX = unused
+	static float __fastcall getCalculateDegradationThunk(Actor* actor, void*)
+	{
+		if (!actor) {
+			const float* damageToWeaponSetting = reinterpret_cast<const float*>(0x11CF154);
+			return *damageToWeaponSetting;
+		}
+		return actor->getCalculateDegradation();
+	}
+}
+
+__declspec(naked) float __cdecl GetDamageToWeaponHook(Actor* actor)
+{
+
+	__asm
+	{
+		mov     ecx, [esp + 4]      // this = actor
+		xor edx, edx				// dummy for __fastcall thunk
+		call    refactored::getCalculateDegradationThunk
+		retn                        // don't pop args; caller cleans (cdecl at call site)
+	}
+
 }
 
 //	Credits to lStewieAl and TrueCourierSix
@@ -4812,7 +4840,12 @@ bool __fastcall SetOptionalPatch(UInt32 patchID, bool bEnable)
 				return false;
 			s_patchInstallState.bigGunsSkill = bEnable;
 			ActorValueInfo *avInfo = ActorValueInfo::Array()[kAVCode_BigGuns];
-			avInfo->avFlags = bEnable ? 0x410 : 0x2000;
+			if (GetModuleHandle("LimitlessStats")) {
+				avInfo->avFlags = bEnable ? 0x400 : 0x2000;
+			}
+			else {
+				avInfo->avFlags = bEnable ? 0x410 : 0x2000;
+			}
 			SetDescriptionAltText(&avInfo->description, bEnable ? kBigGunsDescription : nullptr);
 			return true;
 		}

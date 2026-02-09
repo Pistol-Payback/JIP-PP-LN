@@ -548,7 +548,7 @@ NiAVObject* NiNode::DeepSearchByName(const NiFixedString& nameStr)
 
 	NiAVObject* result = nullptr;
 	this->TraverseHorizontal64([&](NiAVObject* obj) {
-		if (obj->m_blockName == nameStr) {
+		if (obj && obj->m_blockName == nameStr) {
 			result = obj;
 			return false; // stop traversal on first match
 		}
@@ -556,5 +556,25 @@ NiAVObject* NiNode::DeepSearchByName(const NiFixedString& nameStr)
 	});
 
 	return result;
+
+}
+
+void NiAVObject::updatePalette() {
+
+	if (this->m_controller && IS_TYPE(this->m_controller, NiControllerManager) && ((NiControllerManager*)this->m_controller)->defObjPlt) {
+		((NiControllerManager*)this->m_controller)->defObjPlt->updatePalette();
+	}
+
+	if (this->isNiNode() == false) {
+		return;
+	}
+
+	NiNode* tree = (NiNode*)this;
+	tree->TraverseHorizontal64([&](NiAVObject* child) {
+		if (child && child->m_controller && IS_TYPE(child->m_controller, NiControllerManager) && ((NiControllerManager*)child->m_controller)->defObjPlt) {
+			((NiControllerManager*)child->m_controller)->defObjPlt->updatePalette();
+		}
+		return true; // keep going
+	});
 
 }

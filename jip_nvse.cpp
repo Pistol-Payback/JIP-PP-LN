@@ -1452,6 +1452,10 @@ bool NVSEPlugin_Load(const NVSEInterface *nvse)
 	REG_CMD(UpdateNifBlock);
 	REG_CMD(UpdatePlayerScopeModel);
 
+	// v57.54
+	REG_CMD(GetCalculatedWeaponDegradation);
+	REG_CMD(GetCalculatedWeaponDegradationCOND);
+
 	//===========================================================
 
 	if (nvse->isEditor)
@@ -1503,6 +1507,7 @@ __declspec(noinline) void InitContainers()
 		{"bHardcoreNeedsFix", 6}, {"bNoFailedScriptLocks", 7}, {"bDoublePrecision", 8}, {"bQttSelectShortKeys", 9}, {"bFO3WpnDegradation", 11},
 		{"bLocalizedDTDR", 12}, {"bVoiceModulationFix", 13}, {"bSneakBoundingBoxFix", 14}, {"bEnableNVACAlerts", 15}, {"bLoadScreenFix", 16},
 		{"bNPCWeaponMods", 17}, {"uNPCPerks", 18}, {"bCreatureSpreadFix", 19}, {"uWMChancePerLevel", 20}, {"uWMChanceMin", 21}, {"uWMChanceMax", 22}});
+	//Not used in ini, bFO3WpnDegradation, uWMChancePerLevel
 
 	s_LNEventNames->InsertList({{"OnCellEnter", kLNEventMask_OnCellEnter}, {"OnCellExit", kLNEventMask_OnCellExit}, {"OnPlayerGrab", kLNEventMask_OnPlayerGrab},
 		{"OnPlayerRelease", kLNEventMask_OnPlayerRelease}, {"OnCrosshairOn", kLNEventMask_OnCrosshairOn}, {"OnCrosshairOff", kLNEventMask_OnCrosshairOff},

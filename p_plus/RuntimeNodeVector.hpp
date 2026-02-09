@@ -335,7 +335,15 @@ struct NiRuntimeNodeVector {
     void purgeUncachedNodes() {
         allPaths.remove_if(
             [&](NiRuntimeNode const& node) {
-                return !node.cachedPath.size() == 0;
+                return node.cachedPath.size() == 0;
+            }
+        );
+    }
+
+    void purgeInvalidNodes() {
+        allPaths.remove_if(
+            [&](NiRuntimeNode const& node) {
+                return !node.node.isValid();
             }
         );
     }
@@ -691,7 +699,7 @@ struct NiRuntimeNodeVector {
                 NiBlockPathBuilder builderPath;
                 NiNode* child = (NiNode*)subSearch->BuildNiPath(runtimeNode.sparsePath, builderPath);
                 if (!child || child == &root) {
-                    runtimeNode.cachedPath.clear(); //Bad runtime node, mark for delete
+                    runtimeNode.cachedPath.clear(); //Bad runtime node
                     updated = true;
                     return nullptr;
                 }
@@ -705,7 +713,7 @@ struct NiRuntimeNodeVector {
             else { //Normal node
                 NiNode* node = (NiNode*)subSearch->BuildNiPath(runtimeNode.sparsePath, builderPath); //Rebuild path
                 if (!node || !node->isNiNode()) {
-                    runtimeNode.cachedPath.clear(); //Bad runtime node, mark for delete
+                    runtimeNode.cachedPath.clear(); //Bad runtime node
                     updated = true;
                     //Console_Print("JIP::findAndUpdateNode bad runtime node, cachedPath is invalid %s", runtimeNode.originToDebugString().c_str());
                     return nullptr;
@@ -738,6 +746,14 @@ struct NiRuntimeNodeVector {
             }
             else if (NiAVObject* toRemove = findAndUpdateNode(*entry, *root, update)) {
 
+                if (toRemove->m_flags.hasAll(NiAVObject::NiFlags::kNiFlag_IsInserted) == false) {
+                    //update = true;
+                    //Console_Print("JIP::removeAllRuntimeNodes error, tried to purge non-inserted node: %s \nThis will happen if a script tries inserting existing nodes into an unloaded baseform", entry->originToDebugString().c_str());
+                    //entry->node = nullptr; //Bad runtime node, mark for delete
+                    //entry->cachedPath.clear();
+                    continue;
+                }
+
                 if (entry->value.isLink()) { //Is a ^parent inserted node
 
                     NiNode* insertedParent = static_cast<NiNode*>(toRemove);
@@ -749,8 +765,8 @@ struct NiRuntimeNodeVector {
                         insertedParent->replaceMe(originalChild); //Swaps insertedParent with originalChild
                     }
                     else {
-                        Console_Print("JIP::removeAllRuntimeNodes error, couldn't find a valid child to replace an inserted parent: %s", entry->originToDebugString().c_str());
                         insertedParent->m_parent->RemoveObject(insertedParent);
+
                     }
 
 
@@ -766,6 +782,7 @@ struct NiRuntimeNodeVector {
         }
 
         if (update) {
+            purgeInvalidNodes();
             allPaths.resort(); //This should push all the empty cachedPaths to the end of the path stack.
             return false; //has invalid nodes
         }

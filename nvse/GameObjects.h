@@ -239,6 +239,34 @@ public:
 
 	NiNode* getRootNode() { return renderState ? renderState->rootNode : nullptr; };
 
+	void setStartingPos(const NiVector3& posVector, const NiVector4& rotVector, TESObjectCELL* cell)
+	{
+		TESObjectCELL* newCell = cell ? cell : this->GetParentCell();
+
+		/*
+		if (IS_ACTOR(this)) {
+			Actor* actor = static_cast<Actor*>(this);
+			actor->startingWorldOrCell = newCell;
+			actor->startingPos = posVector;
+			return;
+		}
+		*/
+		// --- Non-actor path ------------------------------------------------------
+		if (auto* xStartingCell = GetExtraType(&this->extraDataList, ExtraStartingWorldOrCell)) {
+			xStartingCell->worldOrCell = newCell;
+		}
+
+		if (auto* oldCell = this->GetParentCell()) {
+			oldCell = newCell;
+		}
+
+		// Position/rotation extra (optional—only if present)
+		if (auto* xStartingPos = GetExtraType(&this->extraDataList, ExtraStartingPosition)) {
+			xStartingPos->posVector = posVector;
+		}
+
+	}
+
 };
 static_assert(sizeof(TESObjectREFR) == 0x068);
 
@@ -846,6 +874,9 @@ public:
 	int GetGroundMaterial() const;
 	void RefreshAnimData();
 	double GetPathingDistance(TESObjectREFR *target);
+
+	//static float __cdecl getCalculateDegradation(Actor* actor)
+	float getCalculateDegradation();
 
 };
 

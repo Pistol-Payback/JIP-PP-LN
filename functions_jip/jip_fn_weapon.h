@@ -27,6 +27,9 @@ DEFINE_COMMAND_PLUGIN(WeaponHasModType, 0, kParams_OneForm_OneInt);
 DEFINE_COMMAND_PLUGIN(CalculateShotsPerSec, 1, kParams_OneForm);
 DEFINE_CMD_COND_PLUGIN(IsAttackQueued, 0, nullptr);
 
+DEFINE_COMMAND_PLUGIN(GetCalculatedWeaponDegradation, 0, kParams_OneForm_OneOptionalForm);
+DEFINE_CMD_COND_PLUGIN(GetCalculatedWeaponDegradationCOND, 1, nullptr);
+
 bool Cmd_GetWeaponDetectionSoundLevel_Execute(COMMAND_ARGS)
 {
 	TESObjectWEAP *weapon;
@@ -226,6 +229,43 @@ bool Cmd_GetCalculatedWeaponDamage_Execute(COMMAND_ARGS)
 	*result = tempEntry.CalculateWeaponDamage(owner, condition, ammo);
 	if (weaponInfo)
 		midHiProc->weaponInfo = weaponInfo;
+	return true;
+}
+
+bool Cmd_GetCalculatedWeaponDegradation_Execute(COMMAND_ARGS)
+{
+	TESObjectWEAP* weap = nullptr;
+	TESAmmo* ammo = nullptr;
+	*result = 0;
+	if (!ExtractArgsEx(EXTRACT_ARGS_EX, &weap, &ammo)) return true;
+
+	if (thisObj) { //Cmd_GetCalculatedWeaponDegradationCOND_Eval
+		if (Actor* actor = (Actor*)thisObj; IS_ACTOR(actor) && actor->baseProcess && !actor->baseProcess->processLevel) {
+			*result = actor->getCalculateDegradation();
+		}
+		return true;
+	}
+
+	if (!weap)
+	{
+		*result = weap->getCalculatedWeaponDegradation(ammo);
+	}
+	return true;
+}
+
+bool Cmd_GetCalculatedWeaponDegradationCOND_Execute(COMMAND_ARGS)
+{
+	*result = 0;
+	if (Actor* actor = (Actor*)thisObj; IS_ACTOR(actor) && actor->baseProcess && !actor->baseProcess->processLevel)
+		*result = actor->getCalculateDegradation();
+	return true;
+}
+
+bool Cmd_GetCalculatedWeaponDegradationCOND_Eval(COMMAND_ARGS_EVAL)
+{
+	*result = 0;
+	if (Actor* actor = (Actor*)thisObj; IS_ACTOR(actor) && actor->baseProcess && !actor->baseProcess->processLevel)
+		*result = actor->getCalculateDegradation();
 	return true;
 }
 

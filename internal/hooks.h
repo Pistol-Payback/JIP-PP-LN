@@ -3236,13 +3236,17 @@ __declspec(naked) NiPointLight* __fastcall CreatePointLight(TESObjectLIGH *light
 
 void __fastcall AddPointLights(NiNode* objNode)
 {
-	objNode->AddPointLights();
+	if (objNode) {
+		objNode->AddPointLights();
+	}
 }
 
 
 void __fastcall SetLightProperties(NiPointLight* ptLight, TESObjectLIGH* lightForm)
 {
-	ptLight->SetLightProperties(lightForm);
+	if (ptLight && lightForm) {
+		ptLight->SetLightProperties(lightForm);
+	}
 }
 
 /*
@@ -3777,6 +3781,7 @@ bool s_insertObjects = true;
 //Version 57.41
 void __fastcall DoInsertObjects_New(TESForm* form1, TESForm* form2, NiNode* rootNode) {
 
+
 	// insert-node phase
 	NiRuntimeNodeVector* refNodes = nullptr;
 	NiRuntimeNodeVector* baseFormNodes = nullptr;
@@ -3784,7 +3789,7 @@ void __fastcall DoInsertObjects_New(TESForm* form1, TESForm* form2, NiNode* root
 
 		refNodes = form1->getRuntimeNodes(); //3rd person
 
-		if (form1->IsPlayer()) {
+		if (form1->IsPlayer() && g_thePlayer && g_thePlayer->node1stPerson) {
 			g_thePlayer->node1stPerson->refreshRuntimeNodes(form1->getFirstPersonRuntimeNodes(), nullptr);
 		}
 
@@ -3793,7 +3798,9 @@ void __fastcall DoInsertObjects_New(TESForm* form1, TESForm* form2, NiNode* root
 		baseFormNodes = form2->getRuntimeNodes();
 	}
 
-	rootNode->refreshRuntimeNodes(refNodes, baseFormNodes);
+	if (rootNode) {
+		rootNode->refreshRuntimeNodes(refNodes, baseFormNodes);
+	}
 
 }
 

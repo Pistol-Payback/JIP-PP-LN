@@ -742,52 +742,41 @@ struct ModelLoader
 		return nullptr;
 	}
 
-	/*
-	NiNode* LoadModelCopy(const char* filePath)
-	{
-		Model* baseModel = this->FindCachedModel(filePath);
+	inline bool loadModel(const char* _filePath, Model*& outputModel) {
+
 		NiNode* root = nullptr;
+		outputModel = FindCachedModel(_filePath);
 
-		if (!baseModel) {
+		if (outputModel) {
+			InterlockedIncrement(reinterpret_cast<volatile long*>(&outputModel->refCount));
+			root = outputModel->niNode;
+			if (!root) return false;
+		}
 
-			//QMStack rawQM{};
-			//QueuedModel* qm = reinterpret_cast<QueuedModel*>(&rawQM);
-			QueuedModel* qm = QueuedModel::create();
-			qm = QueuedModel::LoadModel(qm, filePath, 0, nullptr, true, false);
 
-			if (!qm) return nullptr;
+		if (!outputModel) {
 
-			// mark for later cloning
+			QueuedModel* src1 = QueuedModel::create();
+			QueuedModel* qm = QueuedModel::LoadModel(src1, _filePath, 0, nullptr, true, false);
+
+			if (!qm) return false;
+
 			qm->SetFlag(QueuedModel::kFileFound);
 
-			// run the three finishers
-			qm->finalizeModel();
+			qm->Run();				//0x43CCF0
+			qm->UpdateBounds();		//0x43D180
+			ThisCall<void>(0x43C830, qm);
 
-			// pull out the Model*
-			baseModel = qm->model;
-			root = baseModel->niNode;
-			if (!baseModel) return nullptr;
+			outputModel = qm->model;
+			InterlockedIncrement(reinterpret_cast<volatile long*>(&outputModel->refCount));
 
-		}
-		else {
-			// — cached path
-			root = baseModel->niNode;
-			if (!root) return nullptr;
+			root = outputModel->niNode;
+			if (!outputModel) return false;
 		}
 
-		// bump its ref‑count if zero
-		if (baseModel->refCount == 0)
-			InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
+		return root != nullptr;
 
-		// one‑time InitPointLights
-		if (!(root->m_flags & NiAVObject::kNiFlag_DoneInitLights)) {
-			root->DownwardsInitPointLights(root);
-			root->m_flags |= NiAVObject::kNiFlag_DoneInitLights;
-		}
-
-		// return the cloned copy
-		return static_cast<NiNode*>(root->CreateCopy());
-	}*/
+	}
 
 };
 
@@ -871,55 +860,16 @@ struct ModelTemp {
 		load(filePath);
 	}
 
-	/// Attempts to load (or reload) the model. Returns true on success.
+	/// Attempts to load (or reload) the model. Returns true on success. LoadModelCopy(filePath); //old asm version
 	inline bool load(const char* _filePath) {
 
-		//clonedNode = LoadModelCopy(filePath); //Uses asm version for now, because below seems to crash
-
-		//return true;
-		unload();  // if something was already loaded
-		// find or raw‑load
-
-		NiNode* root = nullptr;
-		baseModel = g_modelLoader->FindCachedModel(_filePath);
-		if (baseModel) {
-			InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
+		unload();
+		if (g_modelLoader->loadModel(_filePath, baseModel)) {
+			clonedNode = static_cast<NiNode*>(baseModel->niNode->CreateCopy());
 			tapped = true;
-			root = baseModel->niNode;
-			if (!root) return false;
+			return clonedNode != nullptr;
 		}
-
-
-		if (!baseModel) {
-
-			QueuedModel* src1 = QueuedModel::create();
-			QueuedModel* qm = QueuedModel::LoadModel(src1, _filePath, 0, nullptr, true, false);
-
-			if (!qm) return false;
-
-			qm->SetFlag(QueuedModel::kFileFound);
-
-			qm->Run();				//0x43CCF0
-			qm->UpdateBounds();		//0x43D180
-			ThisCall<void>(0x43C830, qm);
-
-			baseModel = qm->model;
-			InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
-			tapped = true;
-
-			root = baseModel->niNode;
-			if (!baseModel) return false;
-		}
-
-		// bump refcount if first use
-		//if (baseModel->refCount == 0) {
-			//InterlockedIncrement(reinterpret_cast<volatile long*>(&baseModel->refCount));
-			//tapped = true;
-		//}
-
-		// clone it
-		clonedNode = static_cast<NiNode*>(root->CreateCopy());
-		return clonedNode != nullptr;
+		return false;
 
 	}
 

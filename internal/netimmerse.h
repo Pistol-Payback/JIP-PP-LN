@@ -1913,20 +1913,7 @@ public:
 		return ((*(UInt32**)this)[(0xC >> 2)] == 0x6815C0);
 	}
 
-	//Decoded by Wall_SOGB
-	NiControllerManager* getControllerManager() {
-		return ThisCall<NiControllerManager*>(0xA5C570, this, (NiControllerSequence*)0x11F36AC);
-	}
-
-	bool updatePalette() {
-		if (NiControllerManager* manager = getControllerManager()) {
-			if (manager->defObjPlt) {
-				manager->defObjPlt->updatePalette();
-				return true;
-			}
-		}
-		return false;
-	}
+	void updatePalette();
 
 };
 
@@ -2113,7 +2100,10 @@ public:
 		attachAllRuntimeNodes(baseFormRuntimeNodes);
 		attachAllRuntimeNodes(refRuntimeNodes);
 
-		this->UpdateTransformAndBounds(kNiUpdateData);
+		if (baseFormRuntimeNodes || refRuntimeNodes) {
+			this->UpdateTransformAndBounds(kNiUpdateData);
+			this->updatePalette();
+		}
 
 	}
 
